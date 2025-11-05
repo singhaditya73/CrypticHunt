@@ -1,16 +1,16 @@
 module github.com/namishh/holmes
 
-go 1.22.5
+go 1.23.0
 
 require (
-	github.com/a-h/templ v0.2.747
+	github.com/a-h/templ v0.3.960
 	github.com/gorilla/sessions v1.3.0
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo-contrib v0.17.1
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/minio/minio-go/v7 v7.0.77
-	golang.org/x/crypto v0.26.0
+	golang.org/x/crypto v0.40.0
 )
 
 require (
@@ -33,9 +33,9 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
-	golang.org/x/net v0.28.0 // indirect
-	golang.org/x/sys v0.24.0 // indirect
-	golang.org/x/text v0.17.0 // indirect
+	golang.org/x/net v0.42.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 )
 
