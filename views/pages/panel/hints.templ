@@ -1,0 +1,56 @@
+
+package panel
+
+import (
+	"fmt"
+	"github.com/namishh/holmes/services"
+	"github.com/namishh/holmes/views/layouts"
+	"strconv"
+)
+
+templ PanelHints(fromProtected bool, hints []services.Hint) {
+	<div class="h-screen w-screen gap-4 flex text-white flex-col p-8">
+		<div class="w-full flex justify-between items-center">
+			<div class="flex items-center gap-2">
+				<img src="/static/hints.svg" class="h-6"/>
+				<h1 class="text-2xl font-bold">Hints</h1>
+			</div>
+			<a href="/su/hints/new" class="px-6 py-2 bg-white text-black rounded-lg">Add New</a>
+		</div>
+		if len(hints) < 1 {
+			<div class="grow bg-neutral-900 rounded-xl overflow-scroll-y flex justify-center items-center">
+				<h1 class="text-2xl text-neutral-500">No hints available</h1>
+			</div>
+		} else {
+			<div class="grow overflow-scroll-y ">
+				<div class="flex flex-wrap">
+					for _, hint := range hints {
+						<div class="md:w-1/2 w-full xl:w-1/4 p-2">
+							<div class="p-4 w-full bg-neutral-900 rounded-xl flex flex-col gap-2">
+								<div class="flex justify-between items-center">
+									<h1 class="text-xl font-bold">{ hint.Hint }</h1>
+									<a href={ templ.URL(fmt.Sprintf("/su/hints/delete/%d", hint.ID)) } class="px-4 py-[4px] bg-red-400 text-black rounded-lg">Delete</a>
+								</div>
+								<p>Level: { strconv.Itoa(hint.ParentQuestionID) }</p>
+								<p>Worth: { strconv.Itoa(hint.Worth) }</p>
+							</div>
+						</div>
+					}
+				</div>
+			</div>
+		}
+	</div>
+}
+
+templ PanelHintsIndex(
+	title,
+	username string,
+	fromProtected bool,
+	isError bool,
+	cmp templ.Component,
+
+) {
+	@layouts.AdminBase(title, username, fromProtected, isError) {
+		@cmp
+	}
+}
