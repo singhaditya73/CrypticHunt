@@ -6,15 +6,18 @@ import (
 	"net/http"
 	"net/mail"
 	"strings"
+	"time"
+
+	"mime/multipart"
 
 	"github.com/a-h/templ"
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
+	"github.com/namishh/holmes/database"
 	"github.com/namishh/holmes/services"
 	"github.com/namishh/holmes/views/pages/auth"
 	"golang.org/x/crypto/bcrypt"
-	"mime/multipart"
 )
 
 const auth_key string = "auth_key"
@@ -58,17 +61,60 @@ type AuthService interface {
 	UnlockHintForTeam(teamID int, hintID int, worth int) error
 	GetLeaderbaord() ([]services.LeaderBoardUser, error)
 
+	// Question locking methods
+	LockQuestion(questionID int, teamID int) error
+	UnlockQuestion(questionID int) error
+	IsQuestionLocked(questionID int) (bool, *services.QuestionLock, error)
+	IsQuestionSolvedByAnyone(questionID int) (bool, error)
+	GetAllLockedQuestions() ([]services.QuestionLock, error)
+
+	// Timer methods
+	StartQuestionTimer(teamID int, questionID int) error
+	StopQuestionTimer(teamID int, questionID int) error
+	GetTotalSolveTime(teamID int) (int, error)
+	GetQuestionSolveTime(teamID int, questionID int) (int, error)
+
+	// Attempt and penalty methods
+	GetQuestionAttempts(teamID int, questionID int) (*services.QuestionAttempt, error)
+	RecordWrongAttempt(teamID int, questionID int, questionPoints int) (int, int, error)
+	IsQuestionExhausted(teamID int, questionID int) (bool, error)
+	GetTotalPenalty(teamID int) (int, error)
+	DeductPenaltyPoints(teamID int, penalty int) error
+
+	// Quota management methods
+	GetQuotaSlot(teamID int) (*services.QuotaSlot, error)
+	CreateQuotaSlot(teamID int) (*services.QuotaSlot, error)
+	ResetQuotaSlot(teamID int) (*services.QuotaSlot, error)
+	IncrementQuotaCount(teamID int) error
+	CanSolveQuestion(teamID int) (bool, *services.QuotaSlot, error)
+	GetTimeUntilQuotaReset(teamID int) (time.Duration, error)
+
+	// Admin methods
+	AdminUnlockQuestion(questionID int) error
+	GetSolvedQuestions() ([]services.QuestionWithSolvers, error)
+	GetAllSolvedQuestions() ([]services.SolvedQuestionInfo, error)
+	UnlockSolvedQuestion(questionID int, teamID int) error
+	UnlockAllSolvedQuestions(questionID int) error
+
 	GetMedia(query string) ([]string, error)
 	GetIdByPath(path string, table string) (int, error)
 	DeleteMedia(id int, table string) error
+
+	// Health check methods
+	PingDB() error
+	GetDBStats() database.DBStats
 }
 
 type AuthHandler struct {
 	UserServices AuthService
+	Broadcaster  *services.Broadcaster
 }
 
-func NewAuthHandler(us AuthService) *AuthHandler {
-	return &AuthHandler{UserServices: us}
+func NewAuthHandler(us AuthService, broadcaster *services.Broadcaster) *AuthHandler {
+	return &AuthHandler{
+		UserServices: us,
+		Broadcaster:  broadcaster,
+	}
 }
 
 func renderView(c echo.Context, cmp templ.Component) error {

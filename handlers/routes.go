@@ -27,6 +27,19 @@ func SetupRoutes(e *echo.Echo, ah *AuthHandler) {
 	protectedgroup.GET("/openhint/:id", ah.UnlockHint)
 	protectedgroup.POST("/question/:id", ah.Question)
 
+	// API endpoints for real-time updates
+	apigroup := e.Group("/api", ah.authMiddleware)
+	apigroup.GET("/events", ah.SSEHandler) // SSE endpoint for real-time updates
+	apigroup.GET("/locked-questions", ah.GetLockedQuestionsAPI, ModerateRateLimitMiddleware())
+	apigroup.GET("/question-status/:id", ah.GetQuestionStatusAPI, ModerateRateLimitMiddleware())
+	
+	// Public SSE endpoint for testing (no auth required)
+	e.GET("/api/events-test", ah.SSEHandler)
+	
+	// Health check endpoints (no auth required for monitoring)
+	e.GET("/api/health", ah.HealthCheckHandler)
+	e.GET("/api/metrics", ah.MetricsHandler, ah.adminMiddleware) // Protected endpoint
+
 	admingroup := e.Group("/su", ah.adminMiddleware)
 	admingroup.GET("", ah.AdminPageHandler)
 	admingroup.GET("/deleteteam/:id", ah.AdminDeleteTeam)
@@ -45,6 +58,10 @@ func SetupRoutes(e *echo.Echo, ah *AuthHandler) {
 	admingroup.GET("/editquestion/delimage/:name", ah.AdminDeleteImage)
 	admingroup.GET("/editquestion/delvideo/:name", ah.AdminDeleteVideo)
 	admingroup.GET("/editquestion/delaudio/:name", ah.AdminDeleteAudio)
+
+	admingroup.GET("/solved-questions", ah.AdminSolvedQuestionsHandler)
+	admingroup.GET("/unlock-question/:qid/:tid", ah.AdminUnlockQuestionHandler)
+	admingroup.GET("/unlock-question-all/:qid", ah.AdminUnlockAllQuestionHandler)
 
 	e.GET("/*", RouteNotFoundHandler)
 }

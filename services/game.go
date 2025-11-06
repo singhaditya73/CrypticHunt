@@ -6,23 +6,36 @@ import (
 )
 
 type QuestionWithStatus struct {
-	ID       int    `json:"id"`
-	Question string `json:"question"`
-	Answer   string `json:"answer"`
-	Title    string `json:"title"`
-	Points   int    `json:"points"`
-	Solved   bool   `json:"solved"`
+	ID               int    `json:"id"`
+	Question         string `json:"question"`
+	Answer           string `json:"answer"`
+	Title            string `json:"title"`
+	Points           int    `json:"points"`
+	Solved           bool   `json:"solved"`
+	Locked           bool   `json:"locked"`
+	LockedByTeamID   int    `json:"locked_by_team_id"`
+	LockedByName     string `json:"locked_by_name"`
+	LockedByMe       bool   `json:"locked_by_me"`
+	SolvedByAnyone   bool   `json:"solved_by_anyone"`
 }
 
 func (us *UserService) GetAllQuestionsWithStatus(userID int) ([]QuestionWithStatus, error) {
 	query := `SELECT q.id, q.question, q.answer, q.title, q.points,
-           CASE WHEN tcq.team_id IS NOT NULL THEN 1 ELSE 0 END as solved
+           CASE WHEN tcq_mine.team_id IS NOT NULL THEN 1 ELSE 0 END as solved,
+           CASE WHEN ql.question_id IS NOT NULL THEN 1 ELSE 0 END as locked,
+           COALESCE(ql.locked_by_team_id, 0) as locked_by_team_id,
+           COALESCE(t.name, '') as locked_by_name,
+           CASE WHEN ql.locked_by_team_id = ? THEN 1 ELSE 0 END as locked_by_me,
+           CASE WHEN tcq_any.question_id IS NOT NULL THEN 1 ELSE 0 END as solved_by_anyone
     FROM questions q
-    LEFT JOIN team_completed_questions tcq ON q.id = tcq.question_id AND tcq.team_id = ?
+    LEFT JOIN team_completed_questions tcq_mine ON q.id = tcq_mine.question_id AND tcq_mine.team_id = ?
+    LEFT JOIN question_locks ql ON q.id = ql.question_id
+    LEFT JOIN teams t ON ql.locked_by_team_id = t.id
+    LEFT JOIN (SELECT DISTINCT question_id FROM team_completed_questions) tcq_any ON q.id = tcq_any.question_id
     ORDER BY q.points ASC
     `
 
-	rows, err := us.UserStore.DB.Query(query, userID)
+	rows, err := us.UserStore.DB.Query(query, userID, userID)
 	if err != nil {
 		log.Printf("Error querying questions with status: %v", err)
 		return nil, err
@@ -33,12 +46,18 @@ func (us *UserService) GetAllQuestionsWithStatus(userID int) ([]QuestionWithStat
 	for rows.Next() {
 		var q QuestionWithStatus
 		var solved int
-		err := rows.Scan(&q.ID, &q.Question, &q.Answer, &q.Title, &q.Points, &solved)
+		var locked int
+		var lockedByMe int
+		var solvedByAnyone int
+		err := rows.Scan(&q.ID, &q.Question, &q.Answer, &q.Title, &q.Points, &solved, &locked, &q.LockedByTeamID, &q.LockedByName, &lockedByMe, &solvedByAnyone)
 		if err != nil {
 			log.Printf("Error scanning question row: %v", err)
 			return nil, err
 		}
 		q.Solved = solved == 1
+		q.Locked = locked == 1
+		q.LockedByMe = lockedByMe == 1
+		q.SolvedByAnyone = solvedByAnyone == 1
 		questions = append(questions, q)
 	}
 
@@ -144,15 +163,34 @@ func (us *UserService) UpdateTeamLastAnsweredQuestion(teamID int) error {
 }
 
 type LeaderBoardUser struct {
-	Username string
-	Points   int
+	Username         string
+	Points           int
+	QuestionsSolved  int
+	TotalTimeSeconds int
+	TotalPenalty     int
+	NetScore         int
 }
 
 func (us *UserService) GetLeaderbaord() ([]LeaderBoardUser, error) {
-	stmt := `SELECT name, points FROM teams ORDER BY points DESC, last_answered_question ASC;`
+	// Updated query to include questions solved count, total solve time, and penalties
+	// Using COUNT(DISTINCT) to count only unique solved questions
+	stmt := `
+		SELECT 
+			t.name, 
+			t.points,
+			COUNT(DISTINCT tcq.question_id) as questions_solved,
+			COALESCE(SUM(DISTINCT qt.time_taken_seconds), 0) as total_time,
+			COALESCE(SUM(DISTINCT qa.total_penalty), 0) as total_penalty
+		FROM teams t
+		LEFT JOIN team_completed_questions tcq ON t.id = tcq.team_id
+		LEFT JOIN question_timers qt ON t.id = qt.team_id AND qt.question_id = tcq.question_id AND qt.completed_at IS NOT NULL
+		LEFT JOIN question_attempts qa ON t.id = qa.team_id
+		GROUP BY t.id, t.name, t.points
+		ORDER BY questions_solved DESC, (t.points - COALESCE(SUM(DISTINCT qa.total_penalty), 0)) DESC, total_time ASC, t.last_answered_question ASC;`
+	
 	rows, err := us.UserStore.DB.Query(stmt)
 	if err != nil {
-		log.Printf("Eror fetching leaderboard")
+		log.Printf("Error fetching leaderboard: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -161,10 +199,11 @@ func (us *UserService) GetLeaderbaord() ([]LeaderBoardUser, error) {
 
 	for rows.Next() {
 		var user LeaderBoardUser
-		if err := rows.Scan(&user.Username, &user.Points); err != nil {
-			log.Printf("Error scanning completed question: %v", err)
+		if err := rows.Scan(&user.Username, &user.Points, &user.QuestionsSolved, &user.TotalTimeSeconds, &user.TotalPenalty); err != nil {
+			log.Printf("Error scanning leaderboard row: %v", err)
 			return nil, err
 		}
+		user.NetScore = user.Points - user.TotalPenalty
 		users = append(users, user)
 	}
 

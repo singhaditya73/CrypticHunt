@@ -1,0 +1,89 @@
+package panel
+
+import (
+	"fmt"
+	"github.com/namishh/holmes/services"
+	"github.com/namishh/holmes/views/layouts"
+	"strconv"
+)
+
+templ SolvedQuestions(fromProtected bool, questions []services.SolvedQuestionInfo) {
+	<div class="min-h-screen w-screen flex flex-col items-center p-4">
+		<div class="w-full max-w-6xl">
+			<div class="mb-8">
+				<h1 class="text-3xl font-bold text-white mb-2">Solved Questions Management</h1>
+				<p class="text-neutral-400">Unlock questions to allow other teams to attempt them again</p>
+			</div>
+			
+			if len(questions) == 0 {
+				<div class="p-8 text-center text-neutral-500 bg-neutral-900 rounded-lg">
+					No questions have been solved yet.
+				</div>
+			} else {
+				<div class="bg-neutral-900 rounded-lg overflow-hidden border border-neutral-800">
+					<table class="w-full">
+						<thead class="bg-neutral-800 text-neutral-300">
+							<tr>
+								<th class="px-6 py-4 text-left">Question ID</th>
+								<th class="px-6 py-4 text-left">Title</th>
+								<th class="px-6 py-4 text-left">Points</th>
+								<th class="px-6 py-4 text-left">Solved By</th>
+								<th class="px-6 py-4 text-left">Solved At</th>
+								<th class="px-6 py-4 text-center">Action</th>
+							</tr>
+						</thead>
+						<tbody>
+							for i, question := range questions {
+								if i % 2 == 0 {
+									<tr class="border-t border-neutral-800 bg-neutral-900">
+										<td class="px-6 py-4 text-white">{ strconv.Itoa(question.QuestionID) }</td>
+										<td class="px-6 py-4 text-white">{ question.QuestionTitle }</td>
+										<td class="px-6 py-4 text-white">{ strconv.Itoa(question.Points) }</td>
+										<td class="px-6 py-4 text-neutral-300">{ question.SolvedByTeam }</td>
+										<td class="px-6 py-4 text-neutral-400 text-sm">{ question.SolvedAt }</td>
+										<td class="px-6 py-4 text-center">
+											<a 
+												href={ templ.URL(fmt.Sprintf("/su/unlock-question/%d/%d", question.QuestionID, question.TeamID)) }
+												class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded transition text-sm"
+												onclick="return confirm('Are you sure you want to unlock this question for this team?')">
+												Unlock for Team
+											</a>
+										</td>
+									</tr>
+								} else {
+									<tr class="border-t border-neutral-800">
+										<td class="px-6 py-4 text-white">{ strconv.Itoa(question.QuestionID) }</td>
+										<td class="px-6 py-4 text-white">{ question.QuestionTitle }</td>
+										<td class="px-6 py-4 text-white">{ strconv.Itoa(question.Points) }</td>
+										<td class="px-6 py-4 text-neutral-300">{ question.SolvedByTeam }</td>
+										<td class="px-6 py-4 text-neutral-400 text-sm">{ question.SolvedAt }</td>
+										<td class="px-6 py-4 text-center">
+											<a 
+												href={ templ.URL(fmt.Sprintf("/su/unlock-question/%d/%d", question.QuestionID, question.TeamID)) }
+												class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded transition text-sm"
+												onclick="return confirm('Are you sure you want to unlock this question for this team?')">
+												Unlock for Team
+											</a>
+										</td>
+									</tr>
+								}
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+templ SolvedQuestionsIndex(
+	title,
+	username string,
+	fromProtected bool,
+	isError bool,
+	cmp templ.Component,
+) {
+	@layouts.AdminBase(title, username, fromProtected, isError) {
+		@cmp
+	}
+}

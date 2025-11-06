@@ -7,7 +7,7 @@ import (
 	"strconv"
 )
 
-templ Question(fromProtected bool, qn services.Question, hasCompleted bool, media map[string][]string, errs map[string]string, hints []services.Hint) {
+templ Question(fromProtected bool, qn services.Question, hasCompleted bool, media map[string][]string, errs map[string]string, hints []services.Hint, attemptInfo *services.QuestionAttempt) {
 	<div class="min-h-screen flex flex-col">
   <div class="grow">
 			<div class="h-[12rem] grow w-full p-3 background-cover" style="background-image: linear-gradient(to right, #000000dd, #000000aa) ,url('/static/banner.jpg'); background-size: cover;">
@@ -18,6 +18,17 @@ templ Question(fromProtected bool, qn services.Question, hasCompleted bool, medi
 		if !hasCompleted {
 			<div class="w-full pb-4 md:pb-24 flex justify-center">
 				<div class="flex text-white flex-col  w-full p-4 md:w-2/3 lg:w-1/2 xl:w-1/3">
+					if attemptInfo != nil && attemptInfo.WrongAttempts > 0 {
+						<div class="mb-4 p-4 bg-red-900/30 border border-red-700 rounded-lg">
+							<div class="flex justify-between items-center">
+								<span class="text-red-400 font-semibold">Wrong Attempts: { strconv.Itoa(attemptInfo.WrongAttempts) }/5</span>
+								<span class="text-red-400">Penalty: -{ strconv.Itoa(attemptInfo.TotalPenalty) } points</span>
+							</div>
+							<div class="mt-2 text-sm text-neutral-400">
+								{ strconv.Itoa(5 - attemptInfo.WrongAttempts) } attempts remaining
+							</div>
+						</div>
+					}
 					if len(hints) > 0 {
 						<h1 class="text-xl md:text-2xl text-neutral-400 font-bold mb-6">Hints: </h1>
 						<div class="flex flex-col gap-2">

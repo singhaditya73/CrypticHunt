@@ -1,10 +1,27 @@
 package hunt
 
 import (
+	"fmt"
 	"github.com/namishh/holmes/services"
 	"github.com/namishh/holmes/views/layouts"
 	"strconv"
 )
+
+func formatTime(seconds int) string {
+	if seconds == 0 {
+		return "0s"
+	}
+	hours := seconds / 3600
+	minutes := (seconds % 3600) / 60
+	secs := seconds % 60
+	
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm %ds", hours, minutes, secs)
+	} else if minutes > 0 {
+		return fmt.Sprintf("%dm %ds", minutes, secs)
+	}
+	return fmt.Sprintf("%ds", secs)
+}
 
 templ Leaderboard(fromProtected bool, users []services.LeaderBoardUser, user services.User) {
 	<div class="min-h-screen w-screen flex flex-col items-center ">
@@ -26,7 +43,19 @@ templ Leaderboard(fromProtected bool, users []services.LeaderBoardUser, user ser
 							Team
 						</th>
 						<th scope="col" class="px-6 py-3">
-							Score
+							Questions Solved
+						</th>
+						<th scope="col" class="px-6 py-3">
+							Points
+						</th>
+						<th scope="col" class="px-6 py-3">
+							Penalty
+						</th>
+						<th scope="col" class="px-6 py-3">
+							Net Score
+						</th>
+						<th scope="col" class="px-6 py-3">
+							Total Time
 						</th>
 						<th scope="col" class="px-6 py-3">
 							Rank
@@ -41,7 +70,19 @@ templ Leaderboard(fromProtected bool, users []services.LeaderBoardUser, user ser
 									{ user.Username }
 								</th>
 								<td class="px-6 text-center py-4 text-white">
+									{ strconv.Itoa(user.QuestionsSolved) }
+								</td>
+								<td class="px-6 text-center py-4 text-white">
 									{ strconv.Itoa(user.Points) }
+								</td>
+								<td class="px-6 text-center py-4 text-red-400">
+									-{ strconv.Itoa(user.TotalPenalty) }
+								</td>
+								<td class="px-6 text-center py-4 text-emerald-400 font-semibold">
+									{ strconv.Itoa(user.NetScore) }
+								</td>
+								<td class="px-6 text-center py-4 text-white">
+									{ formatTime(user.TotalTimeSeconds) }
 								</td>
 								<td class="px-6 text-white text-center py-4 text-blue">
 									{ strconv.Itoa(i + 1) }
@@ -53,7 +94,19 @@ templ Leaderboard(fromProtected bool, users []services.LeaderBoardUser, user ser
 									{ user.Username }
 								</th>
 								<td class="px-6 text-center py-4 text-white">
+									{ strconv.Itoa(user.QuestionsSolved) }
+								</td>
+								<td class="px-6 text-center py-4 text-white">
 									{ strconv.Itoa(user.Points) }
+								</td>
+								<td class="px-6 text-center py-4 text-red-400">
+									-{ strconv.Itoa(user.TotalPenalty) }
+								</td>
+								<td class="px-6 text-center py-4 text-emerald-400 font-semibold">
+									{ strconv.Itoa(user.NetScore) }
+								</td>
+								<td class="px-6 text-center py-4 text-white">
+									{ formatTime(user.TotalTimeSeconds) }
 								</td>
 								<td class="px-6 text-white text-center py-4 text-blue">
 									{ strconv.Itoa(i + 1) }

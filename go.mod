@@ -1,6 +1,6 @@
 module github.com/namishh/holmes
 
-go 1.23.0
+go 1.24.0
 
 require (
 	github.com/a-h/templ v0.3.960
@@ -10,10 +10,13 @@ require (
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/minio/minio-go/v7 v7.0.77
+	github.com/redis/go-redis/v9 v9.16.0
 	golang.org/x/crypto v0.40.0
 )
 
 require (
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
@@ -36,7 +39,7 @@ require (
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
-	golang.org/x/time v0.5.0 // indirect
+	golang.org/x/time v0.14.0
 )
 
 replace github.com/namishh/holmes => ./

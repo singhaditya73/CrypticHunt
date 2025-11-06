@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE Test - Cryptic Hunt</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .container {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .connected {
+            background: #2d5016;
+            color: #4CAF50;
+        }
+        .disconnected {
+            background: #5c1a1a;
+            color: #f44336;
+        }
+        .event {
+            background: #333;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 3px solid #2196F3;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .event-type {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .timestamp {
+            color: #888;
+            font-size: 11px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.secondary {
+            background: #2196F3;
+        }
+        button.secondary:hover {
+            background: #0b7dda;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .stat-card {
+            background: #333;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .stat-label {
+            color: #888;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        #events {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 SSE Real-Time Updates Test</h1>
+    
+    <div class="container">
+        <div id="status" class="status disconnected">
+            ⚠️ Not Connected
+        </div>
+        
+        <button onclick="connectSSE()">Connect to SSE</button>
+        <button onclick="disconnectSSE()" class="secondary">Disconnect</button>
+        <button onclick="clearEvents()" class="secondary">Clear Events</button>
+        <button onclick="testAPI()">Test API</button>
+    </div>
+
+    <div class="container">
+        <h2>📊 Statistics</h2>
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="eventCount">0</div>
+                <div class="stat-label">Events Received</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="connectionTime">0s</div>
+                <div class="stat-label">Connected Time</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="reconnects">0</div>
+                <div class="stat-label">Reconnects</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>📡 Live Events</h2>
+        <div id="events"></div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let eventCount = 0;
+        let reconnectCount = 0;
+        let connectionStartTime = null;
+        let timerInterval = null;
+
+        function updateStatus(message, isConnected) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + (isConnected ? 'connected' : 'disconnected');
+        }
+
+        function addEvent(type, data) {
+            eventCount++;
+            document.getElementById('eventCount').textContent = eventCount;
+            
+            const eventsEl = document.getElementById('events');
+            const eventEl = document.createElement('div');
+            eventEl.className = 'event';
+            
+            const now = new Date().toLocaleTimeString();
+            eventEl.innerHTML = `
+                <span class="timestamp">[${now}]</span>
+                <span class="event-type">${type}</span>
+                <pre style="margin: 5px 0; color: #ccc;">${JSON.stringify(data, null, 2)}</pre>
+            `;
+            
+            eventsEl.insertBefore(eventEl, eventsEl.firstChild);
+            
+            // Keep only last 50 events
+            while (eventsEl.children.length > 50) {
+                eventsEl.removeChild(eventsEl.lastChild);
+            }
+        }
+
+        function updateConnectionTimer() {
+            if (connectionStartTime) {
+                const elapsed = Math.floor((Date.now() - connectionStartTime) / 1000);
+                document.getElementById('connectionTime').textContent = elapsed + 's';
+            }
+        }
+
+        function connectSSE() {
+            if (eventSource) {
+                console.log('Already connected');
+                return;
+            }
+
+            updateStatus('🔄 Connecting...', false);
+            
+            eventSource = new EventSource('http://localhost:4200/api/events-test');
+            connectionStartTime = Date.now();
+            
+            timerInterval = setInterval(updateConnectionTimer, 1000);
+
+            eventSource.onopen = () => {
+                updateStatus('✅ Connected to SSE', true);
+                addEvent('connection', { status: 'connected', url: eventSource.url });
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    addEvent(data.type || 'message', data);
+                } catch (e) {
+                    addEvent('raw', { data: event.data });
+                }
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('SSE Error:', error);
+                updateStatus('❌ Connection Error', false);
+                addEvent('error', { message: 'Connection lost', readyState: eventSource.readyState });
+                
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    reconnectCount++;
+                    document.getElementById('reconnects').textContent = reconnectCount;
+                    disconnectSSE();
+                }
+            };
+        }
+
+        function disconnectSSE() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                updateStatus('⚠️ Disconnected', false);
+                addEvent('disconnection', { status: 'disconnected' });
+            }
+            
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            
+            connectionStartTime = null;
+        }
+
+        function clearEvents() {
+            document.getElementById('events').innerHTML = '';
+            eventCount = 0;
+            document.getElementById('eventCount').textContent = '0';
+        }
+
+        async function testAPI() {
+            try {
+                addEvent('api_test', { status: 'fetching', endpoint: '/api/locked-questions' });
+                
+                const response = await fetch('http://localhost:4200/api/locked-questions');
+                const data = await response.json();
+                
+                addEvent('api_response', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    data: data
+                });
+            } catch (error) {
+                addEvent('api_error', { error: error.message });
+            }
+        }
+
+        // Auto-connect on page load
+        window.addEventListener('load', () => {
+            setTimeout(connectSSE, 500);
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            disconnectSSE();
+        });
+    </script>
+</body>
+</html>

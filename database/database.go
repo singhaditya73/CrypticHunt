@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -12,22 +13,37 @@ type DatabaseStore struct {
 	DB *sql.DB
 }
 
+// DBStats represents database connection pool statistics
+type DBStats struct {
+	MaxOpenConnections int
+	OpenConnections    int
+	InUse              int
+	Idle               int
+	WaitCount          int64
+	WaitDuration       time.Duration
+	MaxIdleClosed      int64
+	MaxIdleTimeClosed  int64
+	MaxLifetimeClosed  int64
+}
+
 func GetConnection(dbName string) (*sql.DB, error) {
-	var (
-		err error
-		db  *sql.DB
-	)
-
-	if db != nil {
-		return db, nil
-	}
-
-	db, err = sql.Open("sqlite3", dbName)
+	db, err := sql.Open("sqlite3", dbName)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to connect to the database: %s", err)
+		return nil, fmt.Errorf("failed to connect to the database: %s", err)
 	}
 
-	log.Println("Connected Successfully to the Database")
+	// Configure connection pool for optimal performance
+	db.SetMaxOpenConns(50)           // Maximum number of open connections
+	db.SetMaxIdleConns(25)            // Maximum number of idle connections
+	db.SetConnMaxLifetime(5 * time.Minute) // Maximum lifetime of a connection
+	db.SetConnMaxIdleTime(2 * time.Minute) // Maximum idle time
+
+	// Test the connection
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %s", err)
+	}
+
+	log.Println("Connected Successfully to the Database with optimized pool settings")
 
 	return db, nil
 }
@@ -138,6 +154,84 @@ func CreateMigrations(DBName string, DB *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("Failed to create table: %s", err)
 	}
+
+	// Table to track locked questions
+	stmt = `CREATE TABLE IF NOT EXISTS question_locks (
+    question_id INTEGER PRIMARY KEY,
+    locked_by_team_id INTEGER NOT NULL,
+    locked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (question_id) REFERENCES questions(id),
+    FOREIGN KEY (locked_by_team_id) REFERENCES teams(id)
+    );`
+
+	_, err = DB.Exec(stmt)
+	if err != nil {
+		return fmt.Errorf("Failed to create table: %s", err)
+	}
+
+	// Table to track question timers and solve times
+	stmt = `CREATE TABLE IF NOT EXISTS question_timers (
+    team_id INTEGER,
+    question_id INTEGER,
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    time_taken_seconds INTEGER,
+    PRIMARY KEY (team_id, question_id),
+    FOREIGN KEY (team_id) REFERENCES teams(id),
+    FOREIGN KEY (question_id) REFERENCES questions(id)
+    );`
+
+	_, err = DB.Exec(stmt)
+	if err != nil {
+		return fmt.Errorf("Failed to create table: %s", err)
+	}
+
+	// Table to track wrong attempts and penalties
+	stmt = `CREATE TABLE IF NOT EXISTS question_attempts (
+    team_id INTEGER,
+    question_id INTEGER,
+    wrong_attempts INTEGER DEFAULT 0,
+    total_penalty INTEGER DEFAULT 0,
+    last_attempt_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (team_id, question_id),
+    FOREIGN KEY (team_id) REFERENCES teams(id),
+    FOREIGN KEY (question_id) REFERENCES questions(id)
+    );`
+
+	_, err = DB.Exec(stmt)
+	if err != nil {
+		return fmt.Errorf("Failed to create table: %s", err)
+	}
+
+	// Table to track question solving quota and time slots
+	stmt = `CREATE TABLE IF NOT EXISTS team_quota_slots (
+    team_id INTEGER PRIMARY KEY,
+    current_slot_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    questions_solved_in_slot INTEGER DEFAULT 0,
+    FOREIGN KEY (team_id) REFERENCES teams(id)
+    );`
+
+	_, err = DB.Exec(stmt)
+	if err != nil {
+		return fmt.Errorf("Failed to create table: %s", err)
+	}
+
+	// Create indexes for performance optimization
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_question_locks_question_id ON question_locks(question_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_question_timers_team_question ON question_timers(team_id, question_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_question_attempts_team_question ON question_attempts(team_id, question_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_team_completed_questions ON team_completed_questions(team_id, question_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_team_hint_unlocked ON team_hint_unlocked(team_id, hint_id);`,
+	}
+
+	for _, indexStmt := range indexes {
+		if _, err := DB.Exec(indexStmt); err != nil {
+			log.Printf("Warning: Failed to create index: %v", err)
+		}
+	}
+
+	log.Println("Database indexes created successfully")
 
 	return nil
 }

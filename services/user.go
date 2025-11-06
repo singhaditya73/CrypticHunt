@@ -35,7 +35,7 @@ func (us *UserService) CreateUser(u User) error {
 		return err
 	}
 
-	stmt := `INSERT INTO teams (email, password, name, points) VALUES ($1, $2, $3, 1000)`
+	stmt := `INSERT INTO teams (email, password, name, points) VALUES ($1, $2, $3, 0)`
 
 	_, err = us.UserStore.DB.Exec(stmt, u.Email, string(hashedPassword), u.Username)
 	return err
@@ -136,4 +136,25 @@ func (us *UserService) DeleteTeam(id int) error {
 	stmt.Exec(id)
 
 	return nil
+}
+
+// PingDB checks if the database connection is alive
+func (us *UserService) PingDB() error {
+	return us.UserStore.DB.Ping()
+}
+
+// GetDBStats returns database connection pool statistics
+func (us *UserService) GetDBStats() database.DBStats {
+	stats := us.UserStore.DB.Stats()
+	return database.DBStats{
+		MaxOpenConnections: stats.MaxOpenConnections,
+		OpenConnections:    stats.OpenConnections,
+		InUse:              stats.InUse,
+		Idle:               stats.Idle,
+		WaitCount:          stats.WaitCount,
+		WaitDuration:       stats.WaitDuration,
+		MaxIdleClosed:      stats.MaxIdleClosed,
+		MaxIdleTimeClosed:  stats.MaxIdleTimeClosed,
+		MaxLifetimeClosed:  stats.MaxLifetimeClosed,
+	}
 }

@@ -5,13 +5,39 @@ import (
 	"github.com/namishh/holmes/services"
 	"github.com/namishh/holmes/views/layouts"
 	"strconv"
+	"time"
 )
 
-templ Hunt(fromProtected bool, questions []services.QuestionWithStatus, hasCompleted bool) {
+func formatQuotaTime(slotStart time.Time) string {
+	elapsed := time.Since(slotStart)
+	remaining := (10 * time.Hour) - elapsed
+	if remaining < 0 {
+		return "Quota Reset"
+	}
+	hours := int(remaining.Hours())
+	minutes := int(remaining.Minutes()) % 60
+	return fmt.Sprintf("%dh %dm", hours, minutes)
+}
+
+templ Hunt(fromProtected bool, questions []services.QuestionWithStatus, hasCompleted bool, quotaSlot *services.QuotaSlot) {
 	<div class="min-h-screen md:h-screen w-screen flex flex-col items-center justify-center">
 			<div class="h-[20rem] w-full p-3 background-cover" style="background-image: linear-gradient(to right, #000000dd, #000000aa) ,url('/static/banner.jpg'); background-size: cover;">
-			<div class="flex justify-center items-center h-full">
+			<div class="flex flex-col justify-center items-center h-full">
 				<h1 class="text-3xl md:text-4xl font-bold text-white">Cryptic <span class="text-semibold">Hunt.</span></h1>
+				if quotaSlot != nil {
+					<div class="mt-4 px-6 py-3 bg-neutral-900/80 border border-neutral-700 rounded-lg">
+						<div class="flex items-center gap-4">
+							<span class="text-white font-semibold">Questions Solved:</span>
+							if quotaSlot.QuestionsSolvedInSlot >= 10 {
+								<span class="text-red-400 font-bold">{ strconv.Itoa(quotaSlot.QuestionsSolvedInSlot) }/10 (Quota Full)</span>
+							} else {
+								<span class="text-emerald-400 font-bold">{ strconv.Itoa(quotaSlot.QuestionsSolvedInSlot) }/10</span>
+							}
+							<span class="text-neutral-400">|</span>
+							<span class="text-neutral-300">Resets in: <span class="text-blue-400 font-semibold">{ formatQuotaTime(quotaSlot.CurrentSlotStart) }</span></span>
+						</div>
+					</div>
+				}
 			</div>
 		</div>
 		if len(questions) < 1 {
@@ -27,13 +53,17 @@ templ Hunt(fromProtected bool, questions []services.QuestionWithStatus, hasCompl
 				<div class="grow overflow-scroll-y w-full md:w-3/4 p-4">
 					<div class="flex flex-wrap justify-center">
 						for _, qn := range questions {
-							<div class="w-full md:w-1/2 z-[10]  lg:w-1/3 p-4">
+							<div class="w-full md:w-1/2 z-[10]  lg:w-1/3 p-4" data-question-id={ strconv.Itoa(qn.ID) }>
 								<div class="bg-neutral-900/80 border-[1px] border-neutral-700 shadow-md p-4 rounded-lg">
 									<h2 class="text-xl font-bold text-white">{ qn.Title }</h2>
 									<p class="text-neutral-600"></p>
 									<div class="mt-4 flex items-end justify-between">
 										if qn.Solved {
-											<p class="text-emerald-400">Solved</p>
+											<p class="text-emerald-400">✓ Solved by you</p>
+										} else if qn.SolvedByAnyone {
+											<p class="text-red-400">❌ Already solved</p>
+										} else if qn.Locked {
+											<p class="text-yellow-500">🔒 Being solved by { qn.LockedByName }</p>
 										} else {
 											<a href={ templ.URL(fmt.Sprintf("/hunt/question/%d", qn.ID)) } class="hover:text-neutral-200 transition hover:underline text-neutral-400">Solve</a>
 										}
@@ -52,6 +82,183 @@ templ Hunt(fromProtected bool, questions []services.QuestionWithStatus, hasCompl
     </div>
 		}
 	</div>
+	<script>
+		(function() {
+			// Skip if on question detail page or already initialized
+			if (window.location.pathname.includes('/question/') || window.huntUpdatesInitialized) {
+				return;
+			}
+			window.huntUpdatesInitialized = true;
+
+			let eventSource = null;
+			let pollingInterval = null;
+			let useSSE = true;
+			let lastETag = null;
+			let reconnectAttempts = 0;
+			const MAX_RECONNECT_ATTEMPTS = 3;
+
+			// Update question cards based on lock data
+			const updateQuestionCards = (locks) => {
+				document.querySelectorAll('[data-question-id]').forEach(card => {
+					const questionId = card.getAttribute('data-question-id');
+					const statusDiv = card.querySelector('.mt-4');
+					const firstChild = statusDiv?.firstElementChild;
+					
+					if (!firstChild) return;
+					
+					const currentText = firstChild.textContent || '';
+					
+					// Don't update if already solved
+					if (currentText.includes('Solved by you') || currentText.includes('Already solved')) {
+						return;
+					}
+					
+					const pointsEl = statusDiv.querySelector('.bg-neutral-800');
+					const pointsHTML = pointsEl ? pointsEl.outerHTML : '';
+					
+					const lock = locks.find(l => l.question_id == questionId);
+					
+					if (lock) {
+						if (!currentText.includes('Being solved by')) {
+							statusDiv.innerHTML = `<p class="text-yellow-500">🔒 Being solved by ${lock.locked_by_name}</p>${pointsHTML}`;
+						}
+					} else {
+						if (currentText.includes('Being solved by')) {
+							statusDiv.innerHTML = `<a href="/hunt/question/${questionId}" class="hover:text-neutral-200 transition hover:underline text-neutral-400">Solve</a>${pointsHTML}`;
+						}
+					}
+				});
+			};
+
+			// Fetch locked questions with ETag support
+			const pollLockedQuestions = async () => {
+				try {
+					const headers = {};
+					if (lastETag) {
+						headers['If-None-Match'] = lastETag;
+					}
+					
+					const response = await fetch('/api/locked-questions', { headers });
+					
+					if (response.status === 304) {
+						// Not modified, no update needed
+						return;
+					}
+					
+					if (response.ok) {
+						lastETag = response.headers.get('ETag');
+						const locks = await response.json();
+						updateQuestionCards(locks);
+					}
+				} catch (error) {
+					console.error('Failed to fetch locked questions:', error);
+				}
+			};
+
+			// Initialize SSE connection
+			const initSSE = () => {
+				console.log('Initializing SSE connection...');
+				eventSource = new EventSource('/api/events');
+
+				eventSource.onopen = () => {
+					console.log('SSE connected');
+					reconnectAttempts = 0;
+					// Stop polling if SSE is working
+					if (pollingInterval) {
+						clearInterval(pollingInterval);
+						pollingInterval = null;
+					}
+				};
+
+				eventSource.onmessage = (event) => {
+					try {
+						const data = JSON.parse(event.data);
+						
+						switch (data.type) {
+							case 'question_locked':
+							case 'question_unlocked':
+								// Fetch updated locks
+								pollLockedQuestions();
+								break;
+							case 'question_solved':
+								// Reload to show solved status
+								setTimeout(() => window.location.reload(), 1000);
+								break;
+							case 'leaderboard_update':
+								// Could trigger leaderboard refresh if visible
+								break;
+						}
+					} catch (e) {
+						console.error('Error parsing SSE message:', e);
+					}
+				};
+
+				eventSource.onerror = (error) => {
+					console.error('SSE error:', error);
+					eventSource.close();
+					
+					reconnectAttempts++;
+					if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+						console.log('SSE failed, falling back to polling');
+						useSSE = false;
+						startPolling();
+					} else {
+						// Try to reconnect after a delay
+						setTimeout(initSSE, 5000 * reconnectAttempts);
+					}
+				};
+			};
+
+			// Start polling fallback
+			const startPolling = () => {
+				if (pollingInterval) return;
+				
+				console.log('Starting polling fallback...');
+				pollLockedQuestions(); // Initial fetch
+				
+				// Poll every 10 seconds (reduced from 5)
+				pollingInterval = setInterval(pollLockedQuestions, 10000);
+			};
+
+			// Page Visibility API - pause when tab is hidden
+			document.addEventListener('visibilitychange', () => {
+				if (document.hidden) {
+					// Tab is hidden
+					if (eventSource) {
+						eventSource.close();
+					}
+					if (pollingInterval) {
+						clearInterval(pollingInterval);
+						pollingInterval = null;
+					}
+				} else {
+					// Tab is visible again
+					if (useSSE) {
+						initSSE();
+					} else {
+						startPolling();
+					}
+				}
+			});
+
+			// Initialize based on mode
+			if (useSSE) {
+				initSSE();
+			} else {
+				startPolling();
+			}
+
+			// Cleanup on page unload
+			window.addEventListener('beforeunload', () => {
+				if (eventSource) {
+					eventSource.close();
+				}
+				if (pollingInterval) {
+					clearInterval(pollingInterval);
+				}
+			});
+		})();
+	</script>
 }
 
 templ HuntIndex(

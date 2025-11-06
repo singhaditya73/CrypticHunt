@@ -3,6 +3,11 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
@@ -11,10 +16,6 @@ import (
 	"github.com/namishh/holmes/views/pages/auth"
 	"github.com/namishh/holmes/views/pages/panel"
 	"golang.org/x/crypto/bcrypt"
-	"log"
-	"net/http"
-	"os"
-	"strconv"
 )
 
 func csrfMiddleware() echo.MiddlewareFunc {
@@ -547,3 +548,68 @@ func (ah *AuthHandler) AdminDeleteVideo(c echo.Context) error {
 	ah.UserServices.DeleteMedia(n, "videos")
 	return c.Redirect(http.StatusSeeOther, "/su")
 }
+
+// AdminSolvedQuestionsHandler shows all solved questions with option to unlock them
+func (ah *AuthHandler) AdminSolvedQuestionsHandler(c echo.Context) error {
+	fromProtected, ok := c.Get("FROMPROTECTED").(bool)
+	if !ok {
+		return errors.New("invalid type for key 'FROMPROTECTED'")
+	}
+
+	solvedQuestions, err := ah.UserServices.GetAllSolvedQuestions()
+	if err != nil {
+		return c.String(http.StatusInternalServerError, fmt.Sprintf("Error fetching solved questions: %s", err))
+	}
+
+	view := panel.SolvedQuestions(fromProtected, solvedQuestions)
+	c.Set("ISERROR", false)
+
+	return renderView(c, panel.SolvedQuestionsIndex(
+		"Solved Questions",
+		c.Get(user_name_key).(string),
+		fromProtected,
+		c.Get("ISERROR").(bool),
+		view,
+	))
+}
+
+// AdminUnlockQuestionHandler unlocks a solved question for a specific team
+func (ah *AuthHandler) AdminUnlockQuestionHandler(c echo.Context) error {
+	qid := c.Param("qid")
+	tid := c.Param("tid")
+	
+	questionID, err := strconv.Atoi(qid)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "Invalid question ID")
+	}
+	
+	teamID, err := strconv.Atoi(tid)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "Invalid team ID")
+	}
+
+	err = ah.UserServices.UnlockSolvedQuestion(questionID, teamID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, fmt.Sprintf("Error unlocking question: %s", err))
+	}
+
+	return c.Redirect(http.StatusSeeOther, "/su/solved-questions")
+}
+
+// AdminUnlockAllQuestionHandler unlocks a question for all teams
+func (ah *AuthHandler) AdminUnlockAllQuestionHandler(c echo.Context) error {
+	qid := c.Param("qid")
+	
+	questionID, err := strconv.Atoi(qid)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "Invalid question ID")
+	}
+
+	err = ah.UserServices.UnlockAllSolvedQuestions(questionID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, fmt.Sprintf("Error unlocking question: %s", err))
+	}
+
+	return c.Redirect(http.StatusSeeOther, "/su/solved-questions")
+}
+

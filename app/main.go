@@ -20,16 +20,24 @@ func initMinioClient() (*minio.Client, error) {
 	endpoint := os.Getenv("BUCKET_ENDPOINT")
 	accessKeyID := os.Getenv("BUCKET_ACCESSKEY")
 	secretAccessKey := os.Getenv("BUCKET_SECRETKEY")
+	
+	// If MinIO is not configured, return nil (optional dependency)
+	if endpoint == "" {
+		log.Println("MinIO not configured (BUCKET_ENDPOINT not set) - file uploads will be disabled")
+		return nil, nil
+	}
+	
 	useSSL := true
 	minioClient, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
 		Secure: useSSL,
 	})
 	if err != nil {
-		return nil, err
+		log.Printf("Warning: Failed to initialize MinIO client: %v - file uploads will be disabled", err)
+		return nil, nil
 	}
 
-	log.Println("Successfully connected to the bucket")
+	log.Println("Successfully connected to the MinIO bucket")
 
 	return minioClient, nil
 }
@@ -44,7 +52,8 @@ func main() {
 
 	minioClient, err := initMinioClient()
 	if err != nil {
-		log.Fatalf("Failed to initialize MinIO client: %v", err)
+		log.Printf("Warning: MinIO initialization failed: %v", err)
+		// Continue anyway - MinIO is optional
 	}
 
 	e := echo.New()
@@ -63,11 +72,20 @@ func main() {
 		e.Logger.Fatalf("failed to create store: %s", err)
 	}
 
+	// Initialize broadcaster for SSE (with optional Redis support)
+	redisAddr := os.Getenv("REDIS_ADDR")       // e.g., "localhost:6379"
+	redisPassword := os.Getenv("REDIS_PASSWORD") // leave empty if no password
+	redisDB := 0                                  // default DB
+	
+	broadcaster := services.NewBroadcaster(redisAddr, redisPassword, redisDB)
+	log.Println("Broadcaster initialized for real-time updates")
+
 	us := services.NewUserService(services.User{}, store, minioClient)
-	ah := handlers.NewAuthHandler(us)
+	ah := handlers.NewAuthHandler(us, broadcaster)
 
 	handlers.SetupRoutes(e, ah)
 
 	// Start server
+	log.Println("Starting server on :4200")
 	e.Logger.Fatal(e.Start(":4200"))
 }
