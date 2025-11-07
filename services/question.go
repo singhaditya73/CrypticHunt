@@ -159,35 +159,77 @@ func (us *UserService) GetAllQuestions() ([]Question, error) {
 }
 
 func (us *UserService) DeleteQuestion(id int) error {
-	query := database.ConvertPlaceholders(`DELETE FROM questions WHERE id = ?`)
-	stmt, err := us.UserStore.DB.Prepare(query)
+	log.Printf("Attempting to delete question with ID: %d", id)
+	
+	// First, delete all related records to avoid foreign key constraints
+	// Order matters: delete child records before parent
+	
+	// 1. Delete team_completed_questions
+	query := database.ConvertPlaceholders(`DELETE FROM team_completed_questions WHERE question_id = ?`)
+	_, err := us.UserStore.DB.Exec(query, id)
 	if err != nil {
-		return err
+		log.Printf("Error deleting completed questions for question %d: %v", id, err)
+		return fmt.Errorf("failed to delete completed questions: %v", err)
 	}
-
-	defer stmt.Close()
-
-	stmt.Exec(id)
-
-	c := make([]string, 4)
-	c[0] = "images"
-	c[1] = "audios"
-	c[2] = "videos"
-	c[3] = "hints"
-
-	for _, table := range c {
-		query = database.ConvertPlaceholders(fmt.Sprintf(`DELETE FROM %s  WHERE parent_question_id = ?`, table))
-		stmt, err = us.UserStore.DB.Prepare(query)
+	
+	// 2. Delete question_locks
+	query = database.ConvertPlaceholders(`DELETE FROM question_locks WHERE question_id = ?`)
+	_, err = us.UserStore.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting locks for question %d: %v", id, err)
+		return fmt.Errorf("failed to delete question locks: %v", err)
+	}
+	
+	// 3. Delete question_timers
+	query = database.ConvertPlaceholders(`DELETE FROM question_timers WHERE question_id = ?`)
+	_, err = us.UserStore.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting timers for question %d: %v", id, err)
+		return fmt.Errorf("failed to delete question timers: %v", err)
+	}
+	
+	// 4. Delete question_attempts
+	query = database.ConvertPlaceholders(`DELETE FROM question_attempts WHERE question_id = ?`)
+	_, err = us.UserStore.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting attempts for question %d: %v", id, err)
+		return fmt.Errorf("failed to delete question attempts: %v", err)
+	}
+	
+	// 5. Delete hints and hint unlocks
+	query = database.ConvertPlaceholders(`DELETE FROM team_hint_unlocked WHERE hint_id IN (SELECT id FROM hints WHERE parent_question_id = ?)`)
+	_, err = us.UserStore.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting hint unlocks for question %d: %v", id, err)
+		return fmt.Errorf("failed to delete hint unlocks: %v", err)
+	}
+	
+	// 6. Delete media files (images, videos, audios)
+	mediaTables := []string{"images", "audios", "videos", "hints"}
+	for _, table := range mediaTables {
+		query = database.ConvertPlaceholders(fmt.Sprintf(`DELETE FROM %s WHERE parent_question_id = ?`, table))
+		_, err = us.UserStore.DB.Exec(query, id)
 		if err != nil {
-			return err
+			log.Printf("Error deleting %s for question %d: %v", table, id, err)
+			return fmt.Errorf("failed to delete %s: %v", table, err)
 		}
-
-		defer stmt.Close()
-
-		stmt.Exec(id)
-
 	}
-
+	
+	// 7. Finally, delete the question itself
+	query = database.ConvertPlaceholders(`DELETE FROM questions WHERE id = ?`)
+	result, err := us.UserStore.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting question %d: %v", id, err)
+		return fmt.Errorf("failed to delete question: %v", err)
+	}
+	
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		log.Printf("Question %d not found", id)
+		return fmt.Errorf("question not found")
+	}
+	
+	log.Printf("Successfully deleted question %d and all related records", id)
 	return nil
 }
 

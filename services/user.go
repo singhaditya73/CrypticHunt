@@ -1,6 +1,9 @@
 package services
 
 import (
+	"fmt"
+	"log"
+
 	"github.com/minio/minio-go/v7"
 	"github.com/namishh/holmes/database"
 	"golang.org/x/crypto/bcrypt"
@@ -107,9 +110,74 @@ func (us *UserService) GetAllUsers() ([]User, error) {
 }
 
 func (us *UserService) DeleteTeam(id int) error {
-	query := `DELETE FROM teams WHERE id = $1`
+	log.Printf("Attempting to delete team with ID: %d", id)
+	
+	// Delete all related records first to avoid foreign key constraints
+	
+	// 1. Delete team_completed_questions
+	query := database.ConvertPlaceholders(`DELETE FROM team_completed_questions WHERE team_id = ?`)
 	_, err := us.UserStore.DB.Exec(query, id)
-	return err
+	if err != nil {
+		log.Printf("Error deleting completed questions for team %d: %v", id, err)
+		return fmt.Errorf("failed to delete completed questions: %v", err)
+	}
+	
+	// 2. Delete question_locks
+	query = database.ConvertPlaceholders(`DELETE FROM question_locks WHERE locked_by_team_id = ?`)
+	_, err = us.UserStore.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting locks for team %d: %v", id, err)
+		return fmt.Errorf("failed to delete question locks: %v", err)
+	}
+	
+	// 3. Delete question_timers
+	query = database.ConvertPlaceholders(`DELETE FROM question_timers WHERE team_id = ?`)
+	_, err = us.UserStore.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting timers for team %d: %v", id, err)
+		return fmt.Errorf("failed to delete question timers: %v", err)
+	}
+	
+	// 4. Delete question_attempts
+	query = database.ConvertPlaceholders(`DELETE FROM question_attempts WHERE team_id = ?`)
+	_, err = us.UserStore.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting attempts for team %d: %v", id, err)
+		return fmt.Errorf("failed to delete question attempts: %v", err)
+	}
+	
+	// 5. Delete team_hint_unlocked
+	query = database.ConvertPlaceholders(`DELETE FROM team_hint_unlocked WHERE team_id = ?`)
+	_, err = us.UserStore.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting hint unlocks for team %d: %v", id, err)
+		return fmt.Errorf("failed to delete hint unlocks: %v", err)
+	}
+	
+	// 6. Delete team_quota_slots
+	query = database.ConvertPlaceholders(`DELETE FROM team_quota_slots WHERE team_id = ?`)
+	_, err = us.UserStore.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting quota slots for team %d: %v", id, err)
+		return fmt.Errorf("failed to delete quota slots: %v", err)
+	}
+	
+	// 7. Finally, delete the team itself
+	query = database.ConvertPlaceholders(`DELETE FROM teams WHERE id = ?`)
+	result, err := us.UserStore.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting team %d: %v", id, err)
+		return fmt.Errorf("failed to delete team: %v", err)
+	}
+	
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		log.Printf("Team %d not found", id)
+		return fmt.Errorf("team not found")
+	}
+	
+	log.Printf("Successfully deleted team %d and all related records", id)
+	return nil
 }
 
 // PingDB checks if the database connection is alive
