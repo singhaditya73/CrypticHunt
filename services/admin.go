@@ -8,25 +8,43 @@ import (
 )
 
 // AdminUnlockQuestion allows admin to unlock a solved question so other users can attempt it
+// This PRESERVES existing completions and only clears locks/timers/attempts for non-solvers
 func (us *UserService) AdminUnlockQuestion(questionID int) error {
-	// Remove all completion records for this question
-	query := database.ConvertPlaceholders(`DELETE FROM team_completed_questions WHERE question_id = ?`)
+	// DO NOT delete from team_completed_questions - keep existing solves!
 	
-	_, err := us.UserStore.DB.Exec(query, questionID)
-	if err != nil {
-		log.Printf("Error unlocking question %d: %v", questionID, err)
-		return err
-	}
-	
-	// Also remove any active locks on this question
+	// Remove any active locks on this question
 	lockQuery := database.ConvertPlaceholders(`DELETE FROM question_locks WHERE question_id = ?`)
-	_, err = us.UserStore.DB.Exec(lockQuery, questionID)
+	result, err := us.UserStore.DB.Exec(lockQuery, questionID)
 	if err != nil {
 		log.Printf("Error removing locks for question %d: %v", questionID, err)
 		return err
 	}
+	locksRemoved, _ := result.RowsAffected()
 	
-	log.Printf("Admin unlocked question %d for all users", questionID)
+	// Reset question timers ONLY for teams who haven't solved it
+	timerQuery := database.ConvertPlaceholders(`
+		DELETE FROM question_timers 
+		WHERE question_id = ? 
+		AND team_id NOT IN (SELECT team_id FROM team_completed_questions WHERE question_id = ?)`)
+	result, err = us.UserStore.DB.Exec(timerQuery, questionID, questionID)
+	if err != nil {
+		log.Printf("Error removing timers for question %d: %v", questionID, err)
+	}
+	timersRemoved, _ := result.RowsAffected()
+	
+	// Reset wrong attempts ONLY for teams who haven't solved it
+	attemptsQuery := database.ConvertPlaceholders(`
+		DELETE FROM question_attempts 
+		WHERE question_id = ? 
+		AND team_id NOT IN (SELECT team_id FROM team_completed_questions WHERE question_id = ?)`)
+	result, err = us.UserStore.DB.Exec(attemptsQuery, questionID, questionID)
+	if err != nil {
+		log.Printf("Error removing attempts for question %d: %v", questionID, err)
+	}
+	attemptsRemoved, _ := result.RowsAffected()
+	
+	log.Printf("Admin unlocked question %d for other users (locks: %d, timers: %d, attempts: %d). Existing solves preserved.", 
+		questionID, locksRemoved, timersRemoved, attemptsRemoved)
 	return nil
 }
 
