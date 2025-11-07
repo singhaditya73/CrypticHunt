@@ -43,19 +43,10 @@ func (us *UserService) CreateUser(u User) error {
 
 func (us *UserService) CheckUsername(usr string) (User, error) {
 	query := `SELECT id, email, password, name, points FROM teams
-		WHERE name = ?`
-
-	stmt, err := us.UserStore.DB.Prepare(query)
-	if err != nil {
-		return User{}, err
-	}
-
-	defer stmt.Close()
+		WHERE name = $1`
 
 	us.User.Username = usr
-	err = stmt.QueryRow(
-		us.User.Username,
-	).Scan(
+	err := us.UserStore.DB.QueryRow(query, us.User.Username).Scan(
 		&us.User.ID,
 		&us.User.Email,
 		&us.User.Password,
@@ -71,19 +62,10 @@ func (us *UserService) CheckUsername(usr string) (User, error) {
 
 func (us *UserService) CheckEmail(email string) (User, error) {
 	query := `SELECT id, email, password, name FROM teams
-		WHERE email = ?`
-
-	stmt, err := us.UserStore.DB.Prepare(query)
-	if err != nil {
-		return User{}, err
-	}
-
-	defer stmt.Close()
+		WHERE email = $1`
 
 	us.User.Email = email
-	err = stmt.QueryRow(
-		us.User.Email,
-	).Scan(
+	err := us.UserStore.DB.QueryRow(query, us.User.Email).Scan(
 		&us.User.ID,
 		&us.User.Email,
 		&us.User.Password,
@@ -125,17 +107,9 @@ func (us *UserService) GetAllUsers() ([]User, error) {
 }
 
 func (us *UserService) DeleteTeam(id int) error {
-	query := `DELETE FROM teams WHERE id = ?`
-	stmt, err := us.UserStore.DB.Prepare(query)
-	if err != nil {
-		return err
-	}
-
-	defer stmt.Close()
-
-	stmt.Exec(id)
-
-	return nil
+	query := `DELETE FROM teams WHERE id = $1`
+	_, err := us.UserStore.DB.Exec(query, id)
+	return err
 }
 
 // PingDB checks if the database connection is alive
