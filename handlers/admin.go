@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/namishh/holmes/database"
 	"github.com/namishh/holmes/services"
 	"github.com/namishh/holmes/views/pages/auth"
 	"github.com/namishh/holmes/views/pages/panel"
@@ -660,13 +661,13 @@ func (ah *AuthHandler) AdminEditQuestionHandler(c echo.Context) error {
 	inputs["question"] = question.Question
 	inputs["points"] = strconv.Itoa(question.Points)
 
-	media["images"], err = ah.UserServices.GetMedia("SELECT path FROM images where parent_question_id = ?", t)
-	media["videos"], err = ah.UserServices.GetMedia("SELECT path FROM videos where parent_question_id = ?", t)
-	media["audios"], err = ah.UserServices.GetMedia("SELECT path FROM audios where parent_question_id = ?", t)
+	media["images"], err = ah.UserServices.GetMedia(database.ConvertPlaceholders("SELECT path FROM images where parent_question_id = ?"), t)
+	media["videos"], err = ah.UserServices.GetMedia(database.ConvertPlaceholders("SELECT path FROM videos where parent_question_id = ?"), t)
+	media["audios"], err = ah.UserServices.GetMedia(database.ConvertPlaceholders("SELECT path FROM audios where parent_question_id = ?"), t)
 
-	media["limages"], err = ah.UserServices.GetMedia("SELECT id FROM images where parent_question_id = ?", t)
-	media["lvideos"], err = ah.UserServices.GetMedia("SELECT id FROM videos where parent_question_id = ?", t)
-	media["laudios"], err = ah.UserServices.GetMedia("SELECT id FROM audios where parent_question_id = ?", t)
+	media["limages"], err = ah.UserServices.GetMedia(database.ConvertPlaceholders("SELECT id FROM images where parent_question_id = ?"), t)
+	media["lvideos"], err = ah.UserServices.GetMedia(database.ConvertPlaceholders("SELECT id FROM videos where parent_question_id = ?"), t)
+	media["laudios"], err = ah.UserServices.GetMedia(database.ConvertPlaceholders("SELECT id FROM audios where parent_question_id = ?"), t)
 
 	if c.Request().Method == "POST" {
 

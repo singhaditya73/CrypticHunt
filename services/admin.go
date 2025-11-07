@@ -1,11 +1,16 @@
 package services
 
-import "log"
+import (
+	"log"
+	"os"
+
+	"github.com/namishh/holmes/database"
+)
 
 // AdminUnlockQuestion allows admin to unlock a solved question so other users can attempt it
 func (us *UserService) AdminUnlockQuestion(questionID int) error {
 	// Remove all completion records for this question
-	query := `DELETE FROM team_completed_questions WHERE question_id = ?`
+	query := database.ConvertPlaceholders(`DELETE FROM team_completed_questions WHERE question_id = ?`)
 	
 	_, err := us.UserStore.DB.Exec(query, questionID)
 	if err != nil {
@@ -14,7 +19,7 @@ func (us *UserService) AdminUnlockQuestion(questionID int) error {
 	}
 	
 	// Also remove any active locks on this question
-	lockQuery := `DELETE FROM question_locks WHERE question_id = ?`
+	lockQuery := database.ConvertPlaceholders(`DELETE FROM question_locks WHERE question_id = ?`)
 	_, err = us.UserStore.DB.Exec(lockQuery, questionID)
 	if err != nil {
 		log.Printf("Error removing locks for question %d: %v", questionID, err)
@@ -27,18 +32,36 @@ func (us *UserService) AdminUnlockQuestion(questionID int) error {
 
 // GetSolvedQuestions returns all questions that have been solved by any user
 func (us *UserService) GetSolvedQuestions() ([]QuestionWithSolvers, error) {
-	query := `
-		SELECT 
-			q.id, 
-			q.title, 
-			q.points,
-			GROUP_CONCAT(t.name, ', ') as solvers
-		FROM questions q
-		INNER JOIN team_completed_questions tcq ON q.id = tcq.question_id
-		INNER JOIN teams t ON tcq.team_id = t.id
-		GROUP BY q.id, q.title, q.points
-		ORDER BY q.points ASC
-	`
+	var query string
+	if os.Getenv("DATABASE_URL") != "" {
+		// PostgreSQL syntax - use STRING_AGG instead of GROUP_CONCAT
+		query = `
+			SELECT 
+				q.id, 
+				q.title, 
+				q.points,
+				STRING_AGG(t.name, ', ') as solvers
+			FROM questions q
+			INNER JOIN team_completed_questions tcq ON q.id = tcq.question_id
+			INNER JOIN teams t ON tcq.team_id = t.id
+			GROUP BY q.id, q.title, q.points
+			ORDER BY q.points ASC
+		`
+	} else {
+		// SQLite syntax
+		query = `
+			SELECT 
+				q.id, 
+				q.title, 
+				q.points,
+				GROUP_CONCAT(t.name, ', ') as solvers
+			FROM questions q
+			INNER JOIN team_completed_questions tcq ON q.id = tcq.question_id
+			INNER JOIN teams t ON tcq.team_id = t.id
+			GROUP BY q.id, q.title, q.points
+			ORDER BY q.points ASC
+		`
+	}
 	
 	rows, err := us.UserStore.DB.Query(query)
 	if err != nil {
