@@ -1,32 +1,46 @@
 package components
 
 templ Navbar(username string, fromProtected bool) {
-	<div class="fixed top-4 z-[100] left-4">
-		<p class="navt cursor-pointer transition border-[1px] border-neutral-800 rounded-lg inline-block px-4 py-1 text-white"
-		>nav</p>
-		<div class="links navc mt-4 w-[15rem] hidden  flex flex-col bg-neutral-950 rounded-lg border-2 border-neutral-900">
+	<div class="fixed top-4 left-4 z-[100]">
+		<!-- Navbar toggle button -->
+		<p class="navt cursor-pointer transition border border-neutral-800 rounded-lg inline-block px-5 py-2 text-white text-large font-semibold tracking-wide hover:bg-neutral-900">
+			Menu
+		</p>
+
+		<!-- Navbar links container -->
+		<div class="links navc mt-3 w-[50rem] hidden flex flex-col bg-neutral-950 rounded-lg border border-neutral-800 shadow-md">
+			<!-- User info -->
 			if username == "" {
-				<p class="text-white text-sm px-3 py-2 font-bold">Not signed in</p>
+				<p class="text-neutral-400 text-base px-5 py-3 font-medium italic">Not signed in</p>
 			} else {
-				<p class="text-white text-sm px-3 py-2 font-bold">{ username }</p>
+				<p class="text-white text-base px-5 py-3 font-semibold">{ username }</p>
 			}
-			<div class="p-[0.6px] bg-neutral-800"></div>
-			<a class="link text-sm transition hover:bg-neutral-900 text-white p-2 mx-[2px] rounded-lg mt-[2px]" href="/">Home</a>
+
+			<div class="h-[1px] bg-neutral-800 my-1"></div>
+
+			<!-- Navigation links -->
+			<a class="link text-base transition hover:bg-neutral-900 text-white px-5 py-3 rounded-lg" href="/">🏠 Home</a>
+
 			if fromProtected {
-				<a class="link transition text-sm hover:bg-neutral-900 text-white p-2 mx-[2px] rounded-lg" href="/hunt">Hunt</a>
-				<a class="link transition text-sm hover:bg-neutral-900 text-white p-2 mx-[2px] rounded-lg" href="/hunt/leaderboard">Leaderboard</a>
-				<a class="link transition text-sm hover:bg-neutral-900 text-white p-2 mx-[2px] mb-[2px] rounded-lg" href="/logout">Logout</a>
+				<a class="link text-base transition hover:bg-neutral-900 text-white px-5 py-3 rounded-lg" href="/hunt">🧩 The Hunt</a>
+				<a class="link text-base transition hover:bg-neutral-900 text-white px-5 py-3 rounded-lg" href="/hunt/leaderboard">🏆 Leaderboard</a>
+				<a class="link text-base transition hover:bg-neutral-900 text-white px-5 py-3 rounded-lg" href="/logout">🚪 Logout</a>
 			} else {
-				<a class="link transition text-sm hover:bg-neutral-900 text-white p-2 mx-[2px] rounded-lg" href="/register">Register</a>
-				<a class="link transition text-sm hover:bg-neutral-900 text-white p-2 mx-[2px] mb-[2px] rounded-lg" href="/login">Login</a>
+				<a class="link text-base transition hover:bg-neutral-900 text-white px-5 py-3 rounded-lg" href="/register">📝 Register</a>
+				<a class="link text-base transition hover:bg-neutral-900 text-white px-5 py-3 rounded-lg" href="/login">🔑 Login</a>
 			}
-			<div class="p-[0.6px] bg-neutral-800"></div>
-			<a class="link transition text-sm hover:bg-neutral-900 text-white p-2 mx-[2px] mb-[2px] rounded-lg" href="/sudo">Admin</a>
+
+			<div class="h-[1px] bg-neutral-800 my-1"></div>
+
+			<!-- Admin -->
+			<a class="link text-base transition hover:bg-neutral-900 text-white px-5 py-3 rounded-lg" href="/sudo">⚙️ Admin</a>
 		</div>
 	</div>
+
+	<!-- Navbar toggle script -->
 	<script type="text/javascript">
-	   document.querySelector(".navt").addEventListener("click", () => {
-			   document.querySelector(".navc").classList.toggle("hidden");
-		})
+		document.querySelector(".navt").addEventListener("click", () => {
+			document.querySelector(".navc").classList.toggle("hidden");
+		});
 	</script>
 }

@@ -173,12 +173,13 @@ type LeaderBoardUser struct {
 
 func (us *UserService) GetLeaderbaord() ([]LeaderBoardUser, error) {
 	// Updated query to include questions solved count, total solve time, and penalties
-	// Using COUNT(DISTINCT) to count only unique solved questions
+	// Using COUNT with CASE to properly count NULL values as 0
+	// Sorting by: Net Score (DESC), Questions Solved (DESC), Time (ASC)
 	stmt := `
 		SELECT 
 			t.name, 
 			t.points,
-			COUNT(DISTINCT tcq.question_id) as questions_solved,
+			COUNT(CASE WHEN tcq.question_id IS NOT NULL THEN 1 END) as questions_solved,
 			COALESCE(SUM(DISTINCT qt.time_taken_seconds), 0) as total_time,
 			COALESCE(SUM(DISTINCT qa.total_penalty), 0) as total_penalty
 		FROM teams t
@@ -186,7 +187,7 @@ func (us *UserService) GetLeaderbaord() ([]LeaderBoardUser, error) {
 		LEFT JOIN question_timers qt ON t.id = qt.team_id AND qt.question_id = tcq.question_id AND qt.completed_at IS NOT NULL
 		LEFT JOIN question_attempts qa ON t.id = qa.team_id
 		GROUP BY t.id, t.name, t.points
-		ORDER BY questions_solved DESC, (t.points - COALESCE(SUM(DISTINCT qa.total_penalty), 0)) DESC, total_time ASC, t.last_answered_question ASC;`
+		ORDER BY (t.points - COALESCE(SUM(DISTINCT qa.total_penalty), 0)) DESC, questions_solved DESC, total_time ASC, t.last_answered_question ASC;`
 	
 	rows, err := us.UserStore.DB.Query(stmt)
 	if err != nil {

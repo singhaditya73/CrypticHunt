@@ -20,9 +20,6 @@ func (ah *AuthHandler) HomeHandler(c echo.Context) error {
 	if !ok {
 		return errors.New("invalid type for key 'FROMPROTECTED'")
 	}
-	if !ok {
-		return errors.New("invalid type for key 'ISADMIN'")
-	}
 	sess, _ := session.Get(auth_sessions_key, c)
 	// isError = false
 	homeView := pages.Home(fromProtected)
@@ -49,6 +46,9 @@ func (ah *AuthHandler) HomeHandler(c echo.Context) error {
 func (ah *AuthHandler) Hunt(c echo.Context) error {
 	teamID := c.Get(user_id_key).(int)
 	questions, err := ah.UserServices.GetAllQuestionsWithStatus(teamID)
+	if err != nil {
+		return err
+	}
 	hasCompleted, err := ah.UserServices.HasCompletedAllQuestions(teamID)
 	if err != nil {
 		return err
@@ -58,6 +58,17 @@ func (ah *AuthHandler) Hunt(c echo.Context) error {
 	quotaSlot, err := ah.UserServices.GetQuotaSlot(teamID)
 	if err != nil {
 		return err
+	}
+	
+	// Get actual completed questions count
+	actualCount, err := ah.UserServices.GetActualCompletedQuestionsCount(teamID)
+	if err != nil {
+		return err
+	}
+	
+	// Update quota slot display with actual count
+	if quotaSlot != nil {
+		quotaSlot.QuestionsSolvedInSlot = actualCount
 	}
 	
 	fromProtected, ok := c.Get("FROMPROTECTED").(bool)
@@ -382,10 +393,6 @@ func (ah *AuthHandler) Leaderboard(c echo.Context) error {
 		if err != nil {
 			return c.String(http.StatusInternalServerError, fmt.Sprintf("Error fetching you: %s", err))
 		}
-	}
-
-	if err != nil {
-		return c.String(http.StatusInternalServerError, fmt.Sprintf("Error fetching you: %s", err))
 	}
 
 	quizview := hunt.Leaderboard(fromProtected, users, user)

@@ -136,3 +136,18 @@ func (us *UserService) GetTimeUntilQuotaReset(teamID int) (time.Duration, error)
 	
 	return remaining, nil
 }
+
+// GetActualCompletedQuestionsCount returns the actual number of questions completed by the team
+// This is different from QuestionsSolvedInSlot which is quota-based and resets every 10 hours
+func (us *UserService) GetActualCompletedQuestionsCount(teamID int) (int, error) {
+	query := `SELECT COUNT(*) FROM team_completed_questions WHERE team_id = ?`
+	
+	var count int
+	err := us.UserStore.DB.QueryRow(query, teamID).Scan(&count)
+	if err != nil {
+		log.Printf("Error getting completed questions count for team %d: %v", teamID, err)
+		return 0, err
+	}
+	
+	return count, nil
+}

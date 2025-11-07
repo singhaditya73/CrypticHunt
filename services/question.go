@@ -3,14 +3,14 @@ package services
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/minio/minio-go/v7"
-	"golang.org/x/crypto/bcrypt"
 	"log"
 	"mime/multipart"
 	"os"
 	"path/filepath"
-	"time"
+
+	"github.com/google/uuid"
+	"github.com/minio/minio-go/v7"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Question struct {
@@ -40,6 +40,11 @@ type Audio struct {
 }
 
 func (us *UserService) MakeArray(label string, form *multipart.Form, short string) (list []string, err error) {
+	// Check if MinIO is configured
+	if us.MinioClient == nil {
+		return list, fmt.Errorf("file upload is not available - MinIO is not configured")
+	}
+	
 	bucketName := os.Getenv("BUCKET_NAME")
 	files := form.File[label]
 	for _, file := range files {
@@ -59,11 +64,9 @@ func (us *UserService) MakeArray(label string, form *multipart.Form, short strin
 
 		fmt.Println(bucketName, filename)
 
-		presignedURL, err := us.MinioClient.PresignedGetObject(context.Background(), bucketName, filename, time.Second*60*60*24*7, nil)
-		if err != nil {
-			return list, fmt.Errorf("failed to generate presigned URL: %v", err)
-		}
-		list = append(list, presignedURL.String())
+		// Store only the filename, not the presigned URL
+		// URLs will be generated dynamically when needed
+		list = append(list, filename)
 	}
 	return list, nil
 }
@@ -229,7 +232,7 @@ func (us *UserService) GetQuestionById(id int) (Question, error) {
 	return q, nil
 }
 
-func (us *UserService) GetMedia(query string) ([]string, error) {
+func (us *UserService) GetMedia(query string, args ...interface{}) ([]string, error) {
 	media := make([]string, 0)
 	stmt, err := us.UserStore.DB.Prepare(query)
 	if err != nil {
@@ -238,19 +241,36 @@ func (us *UserService) GetMedia(query string) ([]string, error) {
 
 	defer stmt.Close()
 
-	rows, err := stmt.Query()
+	rows, err := stmt.Query(args...)
 	if err != nil {
 		return media, err
 	}
 
+	bucketName := os.Getenv("BUCKET_NAME")
+	endpoint := os.Getenv("BUCKET_ENDPOINT")
+	useSSL := os.Getenv("BUCKET_USE_SSL") == "true"
+	
+	protocol := "http"
+	if useSSL {
+		protocol = "https"
+	}
+
 	for rows.Next() {
-		var u string
-		err := rows.Scan(&u)
+		var filename string
+		err := rows.Scan(&filename)
 		if err != nil {
 			return media, err
 		}
 
-		media = append(media, u)
+		// Generate direct public URL if MinIO is configured
+		if us.MinioClient != nil && endpoint != "" && bucketName != "" {
+			// Use direct URL since bucket is public
+			directURL := fmt.Sprintf("%s://%s/%s/%s", protocol, endpoint, bucketName, filename)
+			media = append(media, directURL)
+		} else {
+			// If MinIO not configured, just return the filename
+			media = append(media, filename)
+		}
 	}
 
 	return media, nil
@@ -276,24 +296,24 @@ func (us *UserService) UpdateQuestion(id int, title string, question string, poi
 func (us *UserService) GetMediaByQuestionId(id int) (map[string][]string, error) {
 	m := make(map[string][]string)
 
-	stmt := fmt.Sprintf(`SELECT path FROM images WHERE parent_question_id = %d`, id)
-	images, err := us.GetMedia(stmt)
+	stmt := `SELECT path FROM images WHERE parent_question_id = ?`
+	images, err := us.GetMedia(stmt, id)
 	if err != nil {
 		return nil, err
 	}
 
 	m["images"] = images
 
-	stmt = fmt.Sprintf(`SELECT path FROM videos WHERE parent_question_id = %d`, id)
-	videos, err := us.GetMedia(stmt)
+	stmt = `SELECT path FROM videos WHERE parent_question_id = ?`
+	videos, err := us.GetMedia(stmt, id)
 	if err != nil {
 		return nil, err
 	}
 
 	m["videos"] = videos
 
-	stmt = fmt.Sprintf(`SELECT path FROM audios WHERE parent_question_id = %d`, id)
-	audios, err := us.GetMedia(stmt)
+	stmt = `SELECT path FROM audios WHERE parent_question_id = ?`
+	audios, err := us.GetMedia(stmt, id)
 	if err != nil {
 		return nil, err
 	}

@@ -79,14 +79,24 @@ func (us *UserService) UnlockQuestion(questionID int) error {
 }
 
 // IsQuestionLocked checks if a question is locked
+// Automatically unlocks questions that have been locked for more than 10 seconds
 func (us *UserService) IsQuestionLocked(questionID int) (bool, *QuestionLock, error) {
+	// First, clean up stale locks (older than 10 seconds)
+	cleanupQuery := `DELETE FROM question_locks 
+					 WHERE question_id = ? 
+					 AND locked_at < datetime('now', '-10 seconds')`
+	_, err := us.UserStore.DB.Exec(cleanupQuery, questionID)
+	if err != nil {
+		log.Printf("Error cleaning up stale lock for question %d: %v", questionID, err)
+	}
+	
 	query := `SELECT ql.question_id, ql.locked_by_team_id, t.name, ql.locked_at 
 			  FROM question_locks ql
 			  JOIN teams t ON ql.locked_by_team_id = t.id
 			  WHERE ql.question_id = ?`
 	
 	var lock QuestionLock
-	err := us.UserStore.DB.QueryRow(query, questionID).Scan(
+	err = us.UserStore.DB.QueryRow(query, questionID).Scan(
 		&lock.QuestionID, 
 		&lock.LockedByTeamID, 
 		&lock.LockedByName,
@@ -106,7 +116,20 @@ func (us *UserService) IsQuestionLocked(questionID int) (bool, *QuestionLock, er
 }
 
 // GetAllLockedQuestions returns all currently locked questions
+// Automatically cleans up stale locks (older than 10 seconds)
 func (us *UserService) GetAllLockedQuestions() ([]QuestionLock, error) {
+	// First, clean up all stale locks
+	cleanupQuery := `DELETE FROM question_locks WHERE locked_at < datetime('now', '-10 seconds')`
+	result, err := us.UserStore.DB.Exec(cleanupQuery)
+	if err != nil {
+		log.Printf("Error cleaning up stale locks: %v", err)
+	} else {
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected > 0 {
+			log.Printf("Cleaned up %d stale question locks", rowsAffected)
+		}
+	}
+	
 	query := `SELECT ql.question_id, ql.locked_by_team_id, t.name, ql.locked_at 
 			  FROM question_locks ql
 			  JOIN teams t ON ql.locked_by_team_id = t.id`
@@ -235,4 +258,23 @@ func (us *UserService) IsQuestionSolvedByAnyone(questionID int) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// CleanupStaleLocks removes all locks older than 10 seconds
+// This should be called periodically to prevent abandoned locks
+func (us *UserService) CleanupStaleLocks() error {
+	query := `DELETE FROM question_locks WHERE locked_at < datetime('now', '-10 seconds')`
+	
+	result, err := us.UserStore.DB.Exec(query)
+	if err != nil {
+		log.Printf("Error cleaning up stale locks: %v", err)
+		return err
+	}
+	
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected > 0 {
+		log.Printf("Cleaned up %d stale question locks (timeout: 10 seconds)", rowsAffected)
+	}
+	
+	return nil
 }

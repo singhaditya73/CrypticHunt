@@ -88,6 +88,7 @@ type AuthService interface {
 	IncrementQuotaCount(teamID int) error
 	CanSolveQuestion(teamID int) (bool, *services.QuotaSlot, error)
 	GetTimeUntilQuotaReset(teamID int) (time.Duration, error)
+	GetActualCompletedQuestionsCount(teamID int) (int, error)
 
 	// Admin methods
 	AdminUnlockQuestion(questionID int) error
@@ -96,7 +97,7 @@ type AuthService interface {
 	UnlockSolvedQuestion(questionID int, teamID int) error
 	UnlockAllSolvedQuestions(questionID int) error
 
-	GetMedia(query string) ([]string, error)
+	GetMedia(query string, args ...interface{}) ([]string, error)
 	GetIdByPath(path string, table string) (int, error)
 	DeleteMedia(id int, table string) error
 
@@ -147,7 +148,8 @@ func (ah *AuthHandler) authMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		sess, _ := session.Get(auth_sessions_key, c)
 		if auth, ok := sess.Values[auth_key].(bool); !ok || !auth {
 			c.Set("FROMPROTECTED", false)
-			return echo.NewHTTPError(echo.ErrUnauthorized.Code, "Please provide valid credentials")
+			// Redirect to login instead of showing error
+			return c.Redirect(http.StatusSeeOther, "/login")
 		}
 
 		if userId, ok := sess.Values[user_id_key].(int); ok && userId != 0 {
@@ -236,6 +238,8 @@ func (ah *AuthHandler) LoginHandler(c echo.Context) error {
 			Path:     "/",
 			MaxAge:   60 * 60 * 24 * 7, // 1 week
 			HttpOnly: true,
+			Secure:   true, // Only send over HTTPS
+			SameSite: http.SameSiteStrictMode, // CSRF protection
 		}
 
 		// Set user as authenticated, their username,
@@ -278,7 +282,7 @@ func (ah *AuthHandler) RegisterHandler(c echo.Context) error {
 	if c.Request().Method == "POST" {
 		email := c.FormValue("email")
 		password := c.FormValue("password")
-		username := c.FormValue("username")
+		username := strings.TrimSpace(c.FormValue("username"))
 
 		if !valid(email) {
 			errs["email"] = "Invalid email address"
@@ -291,14 +295,25 @@ func (ah *AuthHandler) RegisterHandler(c echo.Context) error {
 			c.Set("ISERROR", true)
 		}
 
-		// password valid: minimum 4 letters
-		if len(password) < 4 {
-			errs["password"] = "Password must be at least 4 characters"
+		// password valid: minimum 8 characters
+		if len(password) < 8 {
+			errs["password"] = "Password must be at least 8 characters"
+			c.Set("ISERROR", true)
 		}
 
 		// username valid: minimum 4 letters
 		if len(username) < 4 {
 			errs["username"] = "Username must be at least 4 characters"
+			c.Set("ISERROR", true)
+		}
+		
+		// username valid: only alphanumeric and underscore
+		for _, char := range username {
+			if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_') {
+				errs["username"] = "Username can only contain letters, numbers, and underscores"
+				c.Set("ISERROR", true)
+				break
+			}
 		}
 
 		_, err = ah.UserServices.CheckUsername(username)
