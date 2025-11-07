@@ -175,6 +175,10 @@ func main() {
 	handlers.SetupRoutes(e, ah)
 
 	// Start server
-	log.Println("Starting server on :4200")
-	e.Logger.Fatal(e.Start(":4200"))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "4200"
+	}
+	log.Printf("Starting server on :%s", port)
+	e.Logger.Fatal(e.Start(":" + port))
 }
