@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"time"
 )
 
@@ -82,9 +83,18 @@ func (us *UserService) UnlockQuestion(questionID int) error {
 // Automatically unlocks questions that have been locked for more than 10 seconds
 func (us *UserService) IsQuestionLocked(questionID int) (bool, *QuestionLock, error) {
 	// First, clean up stale locks (older than 10 seconds)
-	cleanupQuery := `DELETE FROM question_locks 
+	var cleanupQuery string
+	if os.Getenv("DATABASE_URL") != "" {
+		// PostgreSQL syntax
+		cleanupQuery = `DELETE FROM question_locks 
+					 WHERE question_id = $1
+					 AND locked_at < NOW() - INTERVAL '10 seconds'`
+	} else {
+		// SQLite syntax
+		cleanupQuery = `DELETE FROM question_locks 
 					 WHERE question_id = ? 
 					 AND locked_at < datetime('now', '-10 seconds')`
+	}
 	_, err := us.UserStore.DB.Exec(cleanupQuery, questionID)
 	if err != nil {
 		log.Printf("Error cleaning up stale lock for question %d: %v", questionID, err)
@@ -119,7 +129,14 @@ func (us *UserService) IsQuestionLocked(questionID int) (bool, *QuestionLock, er
 // Automatically cleans up stale locks (older than 10 seconds)
 func (us *UserService) GetAllLockedQuestions() ([]QuestionLock, error) {
 	// First, clean up all stale locks
-	cleanupQuery := `DELETE FROM question_locks WHERE locked_at < datetime('now', '-10 seconds')`
+	var cleanupQuery string
+	if os.Getenv("DATABASE_URL") != "" {
+		// PostgreSQL syntax
+		cleanupQuery = `DELETE FROM question_locks WHERE locked_at < NOW() - INTERVAL '10 seconds'`
+	} else {
+		// SQLite syntax
+		cleanupQuery = `DELETE FROM question_locks WHERE locked_at < datetime('now', '-10 seconds')`
+	}
 	result, err := us.UserStore.DB.Exec(cleanupQuery)
 	if err != nil {
 		log.Printf("Error cleaning up stale locks: %v", err)
@@ -263,7 +280,14 @@ func (us *UserService) IsQuestionSolvedByAnyone(questionID int) (bool, error) {
 // CleanupStaleLocks removes all locks older than 10 seconds
 // This should be called periodically to prevent abandoned locks
 func (us *UserService) CleanupStaleLocks() error {
-	query := `DELETE FROM question_locks WHERE locked_at < datetime('now', '-10 seconds')`
+	var query string
+	if os.Getenv("DATABASE_URL") != "" {
+		// PostgreSQL syntax
+		query = `DELETE FROM question_locks WHERE locked_at < NOW() - INTERVAL '10 seconds'`
+	} else {
+		// SQLite syntax
+		query = `DELETE FROM question_locks WHERE locked_at < datetime('now', '-10 seconds')`
+	}
 	
 	result, err := us.UserStore.DB.Exec(query)
 	if err != nil {
