@@ -1,0 +1,9 @@
+*.md
+.git
+.env
+tmp/
+*.exe
+node_modules/
+.vscode/
+cookies.txt
+loadtest.js
