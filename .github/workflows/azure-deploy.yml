@@ -28,7 +28,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/holmes:${{ github.sha }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/holmes:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/holmes:latest
 
   deploy:
     needs: build-and-push
@@ -39,4 +41,4 @@ jobs:
         with:
           app-name: Holmes-hunt
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/holmes:${{ github.sha }}
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/holmes:latest
