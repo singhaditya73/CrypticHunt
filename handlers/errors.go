@@ -31,10 +31,16 @@ func CustomHTTPErrorHandler(err error, c echo.Context) {
 	// isError = true
 	c.Set("ISERROR", true)
 
+	// Safe type assertion for FROMPROTECTED
+	fromProtected := false
+	if fp, ok := c.Get("FROMPROTECTED").(bool); ok {
+		fromProtected = fp
+	}
+
 	renderView(c, errors.ErrorIndex(
 		fmt.Sprintf("Error (%d)", code),
-		c.Get("FROMPROTECTED").(bool),
-		errorPage(c.Get("FROMPROTECTED").(bool)),
+		fromProtected,
+		errorPage(fromProtected),
 	))
 }
 

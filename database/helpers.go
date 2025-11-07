@@ -31,15 +31,23 @@ func ConvertPlaceholders(query string) string {
 	converted := result.String()
 	
 	// Convert SQLite-specific syntax to PostgreSQL
-	converted = strings.ReplaceAll(converted, "INSERT OR IGNORE", "INSERT")
-	converted = strings.ReplaceAll(converted, "INSERT OR REPLACE", "INSERT")
-	
-	// Add ON CONFLICT DO NOTHING for INSERT ... ON CONFLICT
-	if strings.Contains(converted, "INSERT INTO team_completed_questions") {
-		converted = strings.Replace(converted, "VALUES", "VALUES", 1)
+	// Handle INSERT OR IGNORE for team_completed_questions
+	if strings.Contains(converted, "INSERT OR IGNORE INTO team_completed_questions") {
+		converted = strings.ReplaceAll(converted, "INSERT OR IGNORE INTO", "INSERT INTO")
 		if !strings.Contains(converted, "ON CONFLICT") {
+			converted = strings.TrimSuffix(converted, ";")
 			converted += " ON CONFLICT (team_id, question_id) DO NOTHING"
 		}
+	} else if strings.Contains(converted, "INSERT OR IGNORE INTO team_hint_unlocked") {
+		converted = strings.ReplaceAll(converted, "INSERT OR IGNORE INTO", "INSERT INTO")
+		if !strings.Contains(converted, "ON CONFLICT") {
+			converted = strings.TrimSuffix(converted, ";")
+			converted += " ON CONFLICT (team_id, hint_id) DO NOTHING"
+		}
+	} else {
+		// General case: just replace INSERT OR IGNORE
+		converted = strings.ReplaceAll(converted, "INSERT OR IGNORE", "INSERT")
+		converted = strings.ReplaceAll(converted, "INSERT OR REPLACE", "INSERT")
 	}
 	
 	return converted
