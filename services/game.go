@@ -3,6 +3,8 @@ package services
 import (
 	"log"
 	"time"
+
+	"github.com/namishh/holmes/database"
 )
 
 type QuestionWithStatus struct {
@@ -25,10 +27,10 @@ func (us *UserService) GetAllQuestionsWithStatus(userID int) ([]QuestionWithStat
            CASE WHEN ql.question_id IS NOT NULL THEN 1 ELSE 0 END as locked,
            COALESCE(ql.locked_by_team_id, 0) as locked_by_team_id,
            COALESCE(t.name, '') as locked_by_name,
-           CASE WHEN ql.locked_by_team_id = ? THEN 1 ELSE 0 END as locked_by_me,
+           CASE WHEN ql.locked_by_team_id = $1 THEN 1 ELSE 0 END as locked_by_me,
            CASE WHEN tcq_any.question_id IS NOT NULL THEN 1 ELSE 0 END as solved_by_anyone
     FROM questions q
-    LEFT JOIN team_completed_questions tcq_mine ON q.id = tcq_mine.question_id AND tcq_mine.team_id = ?
+    LEFT JOIN team_completed_questions tcq_mine ON q.id = tcq_mine.question_id AND tcq_mine.team_id = $2
     LEFT JOIN question_locks ql ON q.id = ql.question_id
     LEFT JOIN teams t ON ql.locked_by_team_id = t.id
     LEFT JOIN (SELECT DISTINCT question_id FROM team_completed_questions) tcq_any ON q.id = tcq_any.question_id
@@ -81,7 +83,7 @@ func (us *UserService) HasCompletedAllQuestions(teamID int) (bool, error) {
 
 	// Get number of completed questions for the team
 	var completedCount int
-	queryCompleted := `SELECT COUNT(*) FROM team_completed_questions WHERE team_id = ?`
+	queryCompleted := database.ConvertPlaceholders(`SELECT COUNT(*) FROM team_completed_questions WHERE team_id = ?`)
 	err = us.UserStore.DB.QueryRow(queryCompleted, teamID).Scan(&completedCount)
 	if err != nil {
 		log.Printf("Error getting completed question count for team %d: %v", teamID, err)
@@ -96,7 +98,7 @@ func (us *UserService) HasCompletedAllQuestions(teamID int) (bool, error) {
 }
 
 func (us *UserService) MarkQuestionAsCompleted(userID, questionID int) error {
-	query := `INSERT OR IGNORE INTO team_completed_questions (team_id, question_id) VALUES (?, ?)`
+	query := database.ConvertPlaceholders(`INSERT OR IGNORE INTO team_completed_questions (team_id, question_id) VALUES (?, ?)`)
 	_, err := us.UserStore.DB.Exec(query, userID, questionID)
 	if err != nil {
 		log.Printf("Error marking question %d as completed for user %d: %v", questionID, userID, err)
@@ -106,7 +108,7 @@ func (us *UserService) MarkQuestionAsCompleted(userID, questionID int) error {
 }
 
 func (us *UserService) GetCompletedQuestions(userID int) ([]int, error) {
-	query := `SELECT question_id FROM team_completed_questions WHERE team_id = ?`
+	query := database.ConvertPlaceholders(`SELECT question_id FROM team_completed_questions WHERE team_id = ?`)
 	rows, err := us.UserStore.DB.Query(query, userID)
 	if err != nil {
 		log.Printf("Error getting completed questions for user %d: %v", userID, err)
@@ -131,7 +133,7 @@ func (us *UserService) GetCompletedQuestions(userID int) ([]int, error) {
 // Return true if solved, false otherwise
 
 func (us *UserService) IsQuestionSolvedByTeam(teamID, questionID int) (bool, error) {
-	query := `SELECT COUNT(*) FROM team_completed_questions WHERE team_id = ? AND question_id = ?`
+	query := database.ConvertPlaceholders(`SELECT COUNT(*) FROM team_completed_questions WHERE team_id = ? AND question_id = ?`)
 	var count int
 	err := us.UserStore.DB.QueryRow(query, teamID, questionID).Scan(&count)
 	if err != nil {
@@ -142,11 +144,11 @@ func (us *UserService) IsQuestionSolvedByTeam(teamID, questionID int) (bool, err
 }
 
 func (us *UserService) UpdateTeamLastAnsweredQuestion(teamID int) error {
-	query := `
+	query := database.ConvertPlaceholders(`
     UPDATE teams
     SET last_answered_question = ?
     WHERE id = ?
-    `
+    `)
 
 	// Get current timestamp
 	currentTime := time.Now()

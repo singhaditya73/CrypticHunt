@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
+	"github.com/namishh/holmes/database"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -75,7 +76,7 @@ func (us *UserService) CreateMedia(ID int, images []string, videos []string, aud
 
 	// Create images
 	for _, img := range images {
-		stmt := `INSERT INTO images (path, parent_question_id) VALUES (?, ?)`
+		stmt := database.ConvertPlaceholders(`INSERT INTO images (path, parent_question_id) VALUES (?, ?)`)
 		_, err := us.UserStore.DB.Exec(stmt, img, ID)
 		if err != nil {
 			log.Printf("Error inserting image: %v", err)
@@ -85,7 +86,7 @@ func (us *UserService) CreateMedia(ID int, images []string, videos []string, aud
 
 	// Create audios
 	for _, audio := range audios {
-		stmt := `INSERT INTO audios (path, parent_question_id) VALUES (?, ?)`
+		stmt := database.ConvertPlaceholders(`INSERT INTO audios (path, parent_question_id) VALUES (?, ?)`)
 		_, err := us.UserStore.DB.Exec(stmt, audio, ID)
 		if err != nil {
 			log.Printf("Error inserting audio: %v", err)
@@ -95,7 +96,7 @@ func (us *UserService) CreateMedia(ID int, images []string, videos []string, aud
 
 	// Create videos
 	for _, video := range videos {
-		stmt := `INSERT INTO videos (path, parent_question_id) VALUES (?, ?)`
+		stmt := database.ConvertPlaceholders(`INSERT INTO videos (path, parent_question_id) VALUES (?, ?)`)
 		_, err := us.UserStore.DB.Exec(stmt, video, ID)
 		if err != nil {
 			log.Printf("Error inserting video: %v", err)
@@ -108,7 +109,7 @@ func (us *UserService) CreateMedia(ID int, images []string, videos []string, aud
 
 func (us *UserService) CreateQuestion(q Question, images []string, videos []string, audios []string) error {
 	// Create a question and get its ID
-	stmt := `INSERT INTO questions (question, answer, title, points) VALUES (?, ?, ?, ?) RETURNING id`
+	stmt := database.ConvertPlaceholders(`INSERT INTO questions (question, answer, title, points) VALUES (?, ?, ?, ?) RETURNING id`)
 	ans, err := bcrypt.GenerateFromPassword([]byte(q.Answer), bcrypt.DefaultCost)
 	if err != nil {
 		log.Printf("Error hashing answer: %v", err)
@@ -158,7 +159,7 @@ func (us *UserService) GetAllQuestions() ([]Question, error) {
 }
 
 func (us *UserService) DeleteQuestion(id int) error {
-	query := `DELETE FROM questions WHERE id = ?`
+	query := database.ConvertPlaceholders(`DELETE FROM questions WHERE id = ?`)
 	stmt, err := us.UserStore.DB.Prepare(query)
 	if err != nil {
 		return err
@@ -175,7 +176,7 @@ func (us *UserService) DeleteQuestion(id int) error {
 	c[3] = "hints"
 
 	for _, table := range c {
-		query = fmt.Sprintf(`DELETE FROM %s  WHERE parent_question_id = ?`, table)
+		query = database.ConvertPlaceholders(fmt.Sprintf(`DELETE FROM %s  WHERE parent_question_id = ?`, table))
 		stmt, err = us.UserStore.DB.Prepare(query)
 		if err != nil {
 			return err
@@ -191,7 +192,7 @@ func (us *UserService) DeleteQuestion(id int) error {
 }
 
 func (us *UserService) DeleteMedia(id int, table string) error {
-	query := fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, table)
+	query := database.ConvertPlaceholders(fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, table))
 	stmt, err := us.UserStore.DB.Prepare(query)
 	if err != nil {
 		return err
@@ -206,7 +207,7 @@ func (us *UserService) DeleteMedia(id int, table string) error {
 
 // get id by path
 func (us *UserService) GetIdByPath(path string, table string) (int, error) {
-	query := fmt.Sprintf(`SELECT id FROM %s WHERE path = ?`, table)
+	query := database.ConvertPlaceholders(fmt.Sprintf(`SELECT id FROM %s WHERE path = ?`, table))
 	var id int
 	err := us.UserStore.DB.QueryRow(query, path).Scan(&id)
 	if err != nil {
@@ -219,7 +220,7 @@ func (us *UserService) GetIdByPath(path string, table string) (int, error) {
 func (us *UserService) GetQuestionById(id int) (Question, error) {
 	var q Question
 
-	query := `SELECT id, question, answer, title, points FROM questions WHERE id = ?`
+	query := database.ConvertPlaceholders(`SELECT id, question, answer, title, points FROM questions WHERE id = ?`)
 
 	err := us.UserStore.DB.QueryRow(query, id).Scan(&q.ID, &q.Question, &q.Answer, &q.Title, &q.Points)
 
@@ -277,9 +278,9 @@ func (us *UserService) GetMedia(query string, args ...interface{}) ([]string, er
 }
 
 func (us *UserService) UpdateQuestion(id int, title string, question string, points int, answer string) error {
-	query := `UPDATE questions
+	query := database.ConvertPlaceholders(`UPDATE questions
               SET title = ?, question = ?, points = ?, answer = ?
-              WHERE id = ?`
+              WHERE id = ?`)
 
 	// Execute the update statement
 	_, err := us.UserStore.DB.Exec(query, title, question, points, answer, id)
@@ -296,7 +297,7 @@ func (us *UserService) UpdateQuestion(id int, title string, question string, poi
 func (us *UserService) GetMediaByQuestionId(id int) (map[string][]string, error) {
 	m := make(map[string][]string)
 
-	stmt := `SELECT path FROM images WHERE parent_question_id = ?`
+	stmt := database.ConvertPlaceholders(`SELECT path FROM images WHERE parent_question_id = ?`)
 	images, err := us.GetMedia(stmt, id)
 	if err != nil {
 		return nil, err
@@ -304,7 +305,7 @@ func (us *UserService) GetMediaByQuestionId(id int) (map[string][]string, error)
 
 	m["images"] = images
 
-	stmt = `SELECT path FROM videos WHERE parent_question_id = ?`
+	stmt = database.ConvertPlaceholders(`SELECT path FROM videos WHERE parent_question_id = ?`)
 	videos, err := us.GetMedia(stmt, id)
 	if err != nil {
 		return nil, err
@@ -312,7 +313,7 @@ func (us *UserService) GetMediaByQuestionId(id int) (map[string][]string, error)
 
 	m["videos"] = videos
 
-	stmt = `SELECT path FROM audios WHERE parent_question_id = ?`
+	stmt = database.ConvertPlaceholders(`SELECT path FROM audios WHERE parent_question_id = ?`)
 	audios, err := us.GetMedia(stmt, id)
 	if err != nil {
 		return nil, err
@@ -324,11 +325,11 @@ func (us *UserService) GetMediaByQuestionId(id int) (map[string][]string, error)
 }
 
 func (us *UserService) AddPointsToTeam(teamID int, points int) error {
-	query := `
+	query := database.ConvertPlaceholders(`
     UPDATE teams
     SET points = points + ?
     WHERE id = ?
-    `
+    `)
 
 	// Execute the update
 	_, err := us.UserStore.DB.Exec(query, points, teamID)

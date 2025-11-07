@@ -1,6 +1,10 @@
 package services
 
-import "log"
+import (
+	"log"
+
+	"github.com/namishh/holmes/database"
+)
 
 type Hint struct {
 	ID               int    `json:"id"`
@@ -11,7 +15,7 @@ type Hint struct {
 
 func (us *UserService) CreateHint(h Hint) error {
 	// Create a hint and get its ID
-	stmt := `INSERT INTO hints (hint, worth, parent_question_id) VALUES (?, ?, ?) RETURNING id`
+	stmt := database.ConvertPlaceholders(`INSERT INTO hints (hint, worth, parent_question_id) VALUES (?, ?, ?) RETURNING id`)
 	err := us.UserStore.DB.QueryRow(stmt, h.Hint, h.Worth, h.ParentQuestionID).Scan(&h.ID)
 	if err != nil {
 		log.Printf("Error inserting hint: %v", err)
@@ -60,7 +64,7 @@ func (us *UserService) GetHints() ([]Hint, error) {
 
 func (us *UserService) GetHintsByQuestionID(questionID int) ([]Hint, error) {
 	// SQL query to select hints for a specific question ID, ordered by hint ID
-	query := `SELECT id, hint, worth, parent_question_id FROM hints WHERE parent_question_id = ? ORDER BY id`
+	query := database.ConvertPlaceholders(`SELECT id, hint, worth, parent_question_id FROM hints WHERE parent_question_id = ? ORDER BY id`)
 
 	// Execute the query with the questionID parameter
 	rows, err := us.UserStore.DB.Query(query, questionID)
@@ -95,7 +99,7 @@ func (us *UserService) GetHintsByQuestionID(questionID int) ([]Hint, error) {
 
 func (us *UserService) DeleteHint(hintID int) error {
 	// SQL query to delete the hint
-	query := "DELETE FROM hints WHERE id = ?"
+	query := database.ConvertPlaceholders("DELETE FROM hints WHERE id = ?")
 
 	// Execute the delete statement
 	_, err := us.UserStore.DB.Exec(query, hintID)
@@ -108,10 +112,10 @@ func (us *UserService) DeleteHint(hintID int) error {
 }
 
 func (us *UserService) UnlockHintForTeam(teamID int, hintID int, worth int) error {
-	query := `
+	query := database.ConvertPlaceholders(`
     INSERT OR IGNORE INTO team_hint_unlocked (team_id, hint_id)
     VALUES (?, ?)
-    `
+    `)
 	_, err := us.UserStore.DB.Exec(query, teamID, hintID)
 	if err != nil {
 		log.Printf("Error unlocking hint %d for team %d: %v", hintID, teamID, err)
@@ -119,7 +123,7 @@ func (us *UserService) UnlockHintForTeam(teamID int, hintID int, worth int) erro
 	}
 
 	// Deduct the hint's worth from the team's points
-	query = `UPDATE teams SET points = points - ? WHERE id = ?`
+	query = database.ConvertPlaceholders(`UPDATE teams SET points = points - ? WHERE id = ?`)
 
 	_, err = us.UserStore.DB.Exec(query, worth, teamID)
 	if err != nil {
@@ -131,10 +135,10 @@ func (us *UserService) UnlockHintForTeam(teamID int, hintID int, worth int) erro
 }
 
 func (us *UserService) HasTeamUnlockedHint(teamID int, hintID int) (bool, error) {
-	query := `
+	query := database.ConvertPlaceholders(`
     SELECT EXISTS(SELECT 1 FROM team_hint_unlocked
                   WHERE team_id = ? AND hint_id = ?)
-    `
+    `)
 	var exists bool
 	err := us.UserStore.DB.QueryRow(query, teamID, hintID).Scan(&exists)
 	if err != nil {
@@ -147,7 +151,7 @@ func (us *UserService) HasTeamUnlockedHint(teamID int, hintID int) (bool, error)
 func (us *UserService) GetHintById(id int) (string, int, error) {
 	var hint string
 	var worth int
-	query := `SELECT hint, worth FROM hints WHERE id = ?`
+	query := database.ConvertPlaceholders(`SELECT hint, worth FROM hints WHERE id = ?`)
 
 	err := us.UserStore.DB.QueryRow(query, id).Scan(&hint, &worth)
 

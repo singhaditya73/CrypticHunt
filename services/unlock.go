@@ -2,6 +2,8 @@ package services
 
 import (
 	"log"
+
+	"github.com/namishh/holmes/database"
 )
 
 type SolvedQuestionInfo struct {
@@ -59,7 +61,7 @@ func (us *UserService) GetAllSolvedQuestions() ([]SolvedQuestionInfo, error) {
 // UnlockSolvedQuestion removes a question from the completed list, allowing others to solve it
 func (us *UserService) UnlockSolvedQuestion(questionID int, teamID int) error {
 	// Remove from team_completed_questions
-	query := `DELETE FROM team_completed_questions WHERE question_id = ? AND team_id = ?`
+	query := database.ConvertPlaceholders(`DELETE FROM team_completed_questions WHERE question_id = ? AND team_id = ?`)
 	
 	_, err := us.UserStore.DB.Exec(query, questionID, teamID)
 	if err != nil {
@@ -73,7 +75,7 @@ func (us *UserService) UnlockSolvedQuestion(questionID int, teamID int) error {
 
 // UnlockAllSolvedQuestions removes all completions for a specific question
 func (us *UserService) UnlockAllSolvedQuestions(questionID int) error {
-	query := `DELETE FROM team_completed_questions WHERE question_id = ?`
+	query := database.ConvertPlaceholders(`DELETE FROM team_completed_questions WHERE question_id = ?`)
 	
 	result, err := us.UserStore.DB.Exec(query, questionID)
 	if err != nil {

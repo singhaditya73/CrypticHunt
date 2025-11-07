@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"log"
 	"time"
+
+	"github.com/namishh/holmes/database"
 )
 
 const (
@@ -19,9 +21,9 @@ type QuotaSlot struct {
 
 // GetQuotaSlot retrieves the current quota slot for a team
 func (us *UserService) GetQuotaSlot(teamID int) (*QuotaSlot, error) {
-	query := `SELECT team_id, current_slot_start, questions_solved_in_slot 
+	query := database.ConvertPlaceholders(`SELECT team_id, current_slot_start, questions_solved_in_slot 
 			  FROM team_quota_slots 
-			  WHERE team_id = ?`
+			  WHERE team_id = ?`)
 	
 	var slot QuotaSlot
 	err := us.UserStore.DB.QueryRow(query, teamID).Scan(
@@ -52,8 +54,8 @@ func (us *UserService) GetQuotaSlot(teamID int) (*QuotaSlot, error) {
 // CreateQuotaSlot creates a new quota slot for a team
 func (us *UserService) CreateQuotaSlot(teamID int) (*QuotaSlot, error) {
 	now := time.Now()
-	query := `INSERT INTO team_quota_slots (team_id, current_slot_start, questions_solved_in_slot)
-			  VALUES (?, ?, 0)`
+	query := database.ConvertPlaceholders(`INSERT INTO team_quota_slots (team_id, current_slot_start, questions_solved_in_slot)
+			  VALUES (?, ?, 0)`)
 	
 	_, err := us.UserStore.DB.Exec(query, teamID, now)
 	if err != nil {
@@ -71,9 +73,9 @@ func (us *UserService) CreateQuotaSlot(teamID int) (*QuotaSlot, error) {
 // ResetQuotaSlot resets the quota slot for a team (starts a new 10-hour window)
 func (us *UserService) ResetQuotaSlot(teamID int) (*QuotaSlot, error) {
 	now := time.Now()
-	query := `UPDATE team_quota_slots 
+	query := database.ConvertPlaceholders(`UPDATE team_quota_slots 
 			  SET current_slot_start = ?, questions_solved_in_slot = 0 
-			  WHERE team_id = ?`
+			  WHERE team_id = ?`)
 	
 	_, err := us.UserStore.DB.Exec(query, now, teamID)
 	if err != nil {
@@ -91,9 +93,9 @@ func (us *UserService) ResetQuotaSlot(teamID int) (*QuotaSlot, error) {
 
 // IncrementQuotaCount increments the questions solved count in the current slot
 func (us *UserService) IncrementQuotaCount(teamID int) error {
-	query := `UPDATE team_quota_slots 
+	query := database.ConvertPlaceholders(`UPDATE team_quota_slots 
 			  SET questions_solved_in_slot = questions_solved_in_slot + 1 
-			  WHERE team_id = ?`
+			  WHERE team_id = ?`)
 	
 	_, err := us.UserStore.DB.Exec(query, teamID)
 	if err != nil {
@@ -140,7 +142,7 @@ func (us *UserService) GetTimeUntilQuotaReset(teamID int) (time.Duration, error)
 // GetActualCompletedQuestionsCount returns the actual number of questions completed by the team
 // This is different from QuestionsSolvedInSlot which is quota-based and resets every 10 hours
 func (us *UserService) GetActualCompletedQuestionsCount(teamID int) (int, error) {
-	query := `SELECT COUNT(*) FROM team_completed_questions WHERE team_id = ?`
+	query := database.ConvertPlaceholders(`SELECT COUNT(*) FROM team_completed_questions WHERE team_id = ?`)
 	
 	var count int
 	err := us.UserStore.DB.QueryRow(query, teamID).Scan(&count)

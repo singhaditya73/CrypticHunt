@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"log"
 	"time"
+
+	"github.com/namishh/holmes/database"
 )
 
 type QuestionAttempt struct {
@@ -16,9 +18,9 @@ type QuestionAttempt struct {
 
 // GetQuestionAttempts retrieves attempt info for a team on a specific question
 func (us *UserService) GetQuestionAttempts(teamID int, questionID int) (*QuestionAttempt, error) {
-	query := `SELECT team_id, question_id, wrong_attempts, total_penalty, last_attempt_at 
+	query := database.ConvertPlaceholders(`SELECT team_id, question_id, wrong_attempts, total_penalty, last_attempt_at 
 			  FROM question_attempts 
-			  WHERE team_id = ? AND question_id = ?`
+			  WHERE team_id = ? AND question_id = ?`)
 	
 	var attempt QuestionAttempt
 	err := us.UserStore.DB.QueryRow(query, teamID, questionID).Scan(
@@ -84,12 +86,12 @@ func (us *UserService) RecordWrongAttempt(teamID int, questionID int, questionPo
 	attemptsLeft := 5 - newAttempts
 	
 	// Insert or update the attempt record
-	query := `INSERT INTO question_attempts (team_id, question_id, wrong_attempts, total_penalty, last_attempt_at)
+	query := database.ConvertPlaceholders(`INSERT INTO question_attempts (team_id, question_id, wrong_attempts, total_penalty, last_attempt_at)
 			  VALUES (?, ?, ?, ?, ?)
 			  ON CONFLICT(team_id, question_id) DO UPDATE SET
 			  wrong_attempts = ?,
 			  total_penalty = ?,
-			  last_attempt_at = ?`
+			  last_attempt_at = ?`)
 	
 	now := time.Now()
 	_, err = us.UserStore.DB.Exec(query, 
@@ -119,9 +121,9 @@ func (us *UserService) IsQuestionExhausted(teamID int, questionID int) (bool, er
 
 // GetTotalPenalty gets the total penalty for a team across all questions
 func (us *UserService) GetTotalPenalty(teamID int) (int, error) {
-	query := `SELECT COALESCE(SUM(total_penalty), 0) 
+	query := database.ConvertPlaceholders(`SELECT COALESCE(SUM(total_penalty), 0) 
 			  FROM question_attempts 
-			  WHERE team_id = ?`
+			  WHERE team_id = ?`)
 	
 	var totalPenalty int
 	err := us.UserStore.DB.QueryRow(query, teamID).Scan(&totalPenalty)
@@ -139,7 +141,7 @@ func (us *UserService) DeductPenaltyPoints(teamID int, penalty int) error {
 		return nil
 	}
 	
-	query := `UPDATE teams SET points = points - ? WHERE id = ?`
+	query := database.ConvertPlaceholders(`UPDATE teams SET points = points - ? WHERE id = ?`)
 	
 	_, err := us.UserStore.DB.Exec(query, penalty, teamID)
 	if err != nil {
