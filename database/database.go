@@ -4,8 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"time"
 
+	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -27,9 +30,25 @@ type DBStats struct {
 }
 
 func GetConnection(dbName string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", dbName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to the database: %s", err)
+	var db *sql.DB
+	var err error
+	
+	// Check if DATABASE_URL is set (PostgreSQL)
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL != "" {
+		// Use PostgreSQL
+		db, err = sql.Open("postgres", databaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to PostgreSQL: %s", err)
+		}
+		log.Println("Using PostgreSQL database")
+	} else {
+		// Use SQLite for local development
+		db, err = sql.Open("sqlite3", dbName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to SQLite: %s", err)
+		}
+		log.Println("Using SQLite database")
 	}
 
 	// Configure connection pool for optimal performance
@@ -49,124 +68,138 @@ func GetConnection(dbName string) (*sql.DB, error) {
 }
 
 func CreateMigrations(DBName string, DB *sql.DB) error {
-	stmt := `CREATE TABLE IF NOT EXISTS teams (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
+	// Detect if using PostgreSQL or SQLite
+	isPostgres := os.Getenv("DATABASE_URL") != ""
+	
+	// Helper function to convert SQL syntax
+	autoIncrement := "INTEGER PRIMARY KEY AUTOINCREMENT"
+	if isPostgres {
+		autoIncrement = "SERIAL PRIMARY KEY"
+	}
+	
+	currentTimestamp := "CURRENT_TIMESTAMP"
+	if isPostgres {
+		currentTimestamp = "NOW()"
+	}
+
+	stmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS teams (
+		id %s,
 		email VARCHAR(255) NOT NULL,
     	points INT DEFAULT 0,
 		password VARCHAR(255) NOT NULL,
 		name VARCHAR(255) UNIQUE NOT NULL,
-		last_answered_question TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		last_answered_question TIMESTAMP DEFAULT %s,
+		created_at TIMESTAMP DEFAULT %s
 		);
-	`
+	`, autoIncrement, currentTimestamp, currentTimestamp)
 
 	_, err := DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create teams table: %s", err)
 	}
 
-	stmt = `CREATE TABLE IF NOT EXISTS questions (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
+	stmt = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS questions (
+		id %s,
     	question TEXT,
      	answer TEXT,
       	title TEXT,
        	points INT
-	);`
+	);`, autoIncrement)
 
 	_, err = DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create questions table: %s", err)
 	}
 
-	stmt = `CREATE TABLE IF NOT EXISTS hints  (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
+	stmt = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS hints  (
+		id %s,
      	hint TEXT,
       	worth INT,
        parent_question_id INT,
        	FOREIGN KEY (parent_question_id) REFERENCES questions(id)
-	);`
+	);`, autoIncrement)
 
 	_, err = DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create hints table: %s", err)
 	}
 
-	stmt = `CREATE TABLE IF NOT EXISTS images (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
+	stmt = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS images (
+		id %s,
     	path TEXT,
      	parent_question_id INTEGER,
      	FOREIGN KEY (parent_question_id) REFERENCES questions(id)
-	);`
+	);`, autoIncrement)
 
 	_, err = DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create images table: %s", err)
 	}
 
-	stmt = `CREATE TABLE IF NOT EXISTS audios (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
+	stmt = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS audios (
+		id %s,
     	path TEXT,
      	parent_question_id INTEGER,
      	FOREIGN KEY(parent_question_id) REFERENCES questions(id)
-	);`
+	);`, autoIncrement)
 
 	_, err = DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create audios table: %s", err)
 	}
 
-	stmt = `CREATE TABLE IF NOT EXISTS videos (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
+	stmt = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS videos (
+		id %s,
     	path TEXT,
      	parent_question_id INTEGER,
      	FOREIGN KEY(parent_question_id) REFERENCES questions(id)
-	);`
+	);`, autoIncrement)
 
 	_, err = DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create videos table: %s", err)
 	}
 
-	stmt = `CREATE TABLE IF NOT EXISTS team_completed_questions (
+	stmt = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS team_completed_questions (
     team_id INTEGER,
     question_id INTEGER,
-    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP DEFAULT %s,
     PRIMARY KEY (team_id, question_id),
     FOREIGN KEY (team_id) REFERENCES teams(id),
     FOREIGN KEY (question_id) REFERENCES questions(id)
-    );`
+    );`, currentTimestamp)
 
 	_, err = DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create team_completed_questions table: %s", err)
 	}
 
-	stmt = `CREATE TABLE IF NOT EXISTS team_hint_unlocked (
+	stmt = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS team_hint_unlocked (
     team_id INTEGER,
     hint_id INTEGER,
-    unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    unlocked_at TIMESTAMP DEFAULT %s,
     PRIMARY KEY (team_id, hint_id),
     FOREIGN KEY (team_id) REFERENCES teams(id),
     FOREIGN KEY (hint_id) REFERENCES hints(id)
-    );`
+    );`, currentTimestamp)
 
 	_, err = DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create team_hint_unlocked table: %s", err)
 	}
 
 	// Table to track locked questions
-	stmt = `CREATE TABLE IF NOT EXISTS question_locks (
+	stmt = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS question_locks (
     question_id INTEGER PRIMARY KEY,
     locked_by_team_id INTEGER NOT NULL,
-    locked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    locked_at TIMESTAMP DEFAULT %s,
     FOREIGN KEY (question_id) REFERENCES questions(id),
     FOREIGN KEY (locked_by_team_id) REFERENCES teams(id)
-    );`
+    );`, currentTimestamp)
 
 	_, err = DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create question_locks table: %s", err)
 	}
 
 	// Table to track question timers and solve times
@@ -183,37 +216,37 @@ func CreateMigrations(DBName string, DB *sql.DB) error {
 
 	_, err = DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create question_timers table: %s", err)
 	}
 
 	// Table to track wrong attempts and penalties
-	stmt = `CREATE TABLE IF NOT EXISTS question_attempts (
+	stmt = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS question_attempts (
     team_id INTEGER,
     question_id INTEGER,
     wrong_attempts INTEGER DEFAULT 0,
     total_penalty INTEGER DEFAULT 0,
-    last_attempt_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_attempt_at TIMESTAMP DEFAULT %s,
     PRIMARY KEY (team_id, question_id),
     FOREIGN KEY (team_id) REFERENCES teams(id),
     FOREIGN KEY (question_id) REFERENCES questions(id)
-    );`
+    );`, currentTimestamp)
 
 	_, err = DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create question_attempts table: %s", err)
 	}
 
 	// Table to track question solving quota and time slots
-	stmt = `CREATE TABLE IF NOT EXISTS team_quota_slots (
+	stmt = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS team_quota_slots (
     team_id INTEGER PRIMARY KEY,
-    current_slot_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    current_slot_start TIMESTAMP DEFAULT %s,
     questions_solved_in_slot INTEGER DEFAULT 0,
     FOREIGN KEY (team_id) REFERENCES teams(id)
-    );`
+    );`, currentTimestamp)
 
 	_, err = DB.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Failed to create table: %s", err)
+		return fmt.Errorf("Failed to create team_quota_slots table: %s", err)
 	}
 
 	// Create indexes for performance optimization
@@ -226,6 +259,10 @@ func CreateMigrations(DBName string, DB *sql.DB) error {
 	}
 
 	for _, indexStmt := range indexes {
+		// For PostgreSQL, we need to handle existing indexes differently
+		if isPostgres {
+			indexStmt = strings.Replace(indexStmt, "CREATE INDEX IF NOT EXISTS", "CREATE INDEX IF NOT EXISTS", 1)
+		}
 		if _, err := DB.Exec(indexStmt); err != nil {
 			log.Printf("Warning: Failed to create index: %v", err)
 		}
